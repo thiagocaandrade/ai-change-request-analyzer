@@ -1,10 +1,12 @@
 package com.ai.change.request.analyzer.domain;
 
+import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.Id;
+import jakarta.persistence.OneToOne;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
@@ -28,7 +30,13 @@ public class ChangeRequest {
   private String traceId;
 
   @Column(columnDefinition = "text")
-  private String result;
+  private String failureReason;
+
+  @OneToOne(mappedBy = "changeRequest", cascade = CascadeType.ALL, orphanRemoval = true)
+  private ChangeAnalysis analysis;
+
+  @OneToOne(mappedBy = "changeRequest", cascade = CascadeType.ALL, orphanRemoval = true)
+  private Approval approval;
 
   @Column(nullable = false)
   private Instant createdAt;
@@ -79,12 +87,34 @@ public class ChangeRequest {
     this.traceId = traceId;
   }
 
-  public String getResult() {
-    return result;
+  public String getFailureReason() {
+    return failureReason;
   }
 
-  public void setResult(String result) {
-    this.result = result;
+  public void setFailureReason(String failureReason) {
+    this.failureReason = failureReason;
+  }
+
+  public ChangeAnalysis getAnalysis() {
+    return analysis;
+  }
+
+  public void setAnalysis(ChangeAnalysis analysis) {
+    this.analysis = analysis;
+    if (analysis != null) {
+      analysis.setChangeRequest(this);
+    }
+  }
+
+  public Approval getApproval() {
+    return approval;
+  }
+
+  public void setApproval(Approval approval) {
+    this.approval = approval;
+    if (approval != null) {
+      approval.setChangeRequest(this);
+    }
   }
 
   public Instant getCreatedAt() {
