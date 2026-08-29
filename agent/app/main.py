@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 
 from app.logging_config import configure_logging
 from graph.builder import build_graph
+from graph.state import initial_state
 
 configure_logging()
 
@@ -51,11 +52,35 @@ def health():
     return {"status": "ok"}
 
 
+def to_response(state):
+    change_request = state.get("change_request") or {}
+    final_result = state.get("final_result") or {}
+    result = {
+        "processed_text": change_request.get("text"),
+        "summary": final_result.get("summary"),
+        "classification": final_result.get("classification"),
+        "risk": final_result.get("risk"),
+        "confidence": final_result.get("confidence"),
+        "rationale": final_result.get("rationale"),
+        "findings": final_result.get("findings"),
+        "test_plan": final_result.get("test_plan"),
+        "approval": final_result.get("approval"),
+    }
+    errors = state.get("errors") or []
+    if errors:
+        result["errors"] = errors
+    return {
+        "request_id": change_request.get("request_id"),
+        "status": state.get("status"),
+        "result": result,
+    }
+
+
 @app.post("/analyze")
 def analyze(payload: AnalyzeRequest):
-    state = graph.invoke({"request_id": payload.request_id, "text": payload.text})
-    return {
-        "request_id": state["request_id"],
-        "status": state["status"],
-        "result": state["result"],
-    }
+    context = structlog.contextvars.get_contextvars()
+    trace_id = context.get("trace_id") or str(uuid.uuid4())
+    state = graph.invoke(
+        initial_state(request_id=payload.request_id, text=payload.text, trace_id=trace_id)
+    )
+    return to_response(state)
