@@ -95,6 +95,7 @@ After completing all artifacts, summarize:
 
 **Guardrails**
 - Create every artifact the apply phase transitively depends on, not just the ids listed in `apply.requires`
+- **Kanban (fluxo automatizado):** se existir `.kilo/flow/<name>.json`, ao criar o `tasks.md` cada grupo `## N. <título>` deve corresponder 1:1 a uma subtarefa `[NN.N]` do Kanban. Se a decomposição divergir, reconciliar: `gh issue edit <n> --title "<novo título>"` e atualizar o estado em `.kilo/flow/<name>.json` (detalhes na Fase 2 de `.kilo/workflows/opsx-flow.md`)
 - Always read dependency artifacts before creating a new one - re-read from disk, not from conversation memory (files may have changed since you last saw them)
 - If context is critically unclear, ask the user - but prefer making reasonable decisions to keep momentum
 - If a change with that name already exists, ask if user wants to continue it or create a new one

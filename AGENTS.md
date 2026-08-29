@@ -6,6 +6,7 @@
 - **Tipo:** projeto acadêmico — entrega até **31/08/26**, avaliado pelos critérios do PDF de requisitos
 - **Objetivo:** receber uma solicitação de alteração em software e produzir análise estruturada de impacto, risco e testes. O agente **NÃO** altera código automaticamente.
 - **Processo:** OpenSpec, fluxo expandido: `/opsx:new` → `/opsx:continue` (ou `/opsx:ff`) → revisar spec/design/tasks → `/opsx:apply` → rodar testes → `/opsx:verify` → `/opsx:sync` → `/opsx:archive`. Nunca implementar o projeto inteiro em uma única change.
+- **Fluxo automatizado Kanban + Git:** o ciclo padrão agora é `/opsx-flow <change>` (`.kilo/workflows/opsx-flow.md`), que orquestra tudo: cria tarefa pai `[NN]` (label `tarefa`) e subtarefas `[NN.M]` (label `subtarefa`) no Kanban GitHub (projeto 62) ANTES do OpenSpec → tramita status (Backlog/Ready/In progress/In review/Done) → roda o fluxo OpenSpec → após `/opsx:archive`, cria branch por subtarefa (`feature/<change>-<nn.m>`), commit, PR/merge na master → Kanban → Done e issues fechadas. Estado em `.kilo/flow/<change>.json` (retomável). Helpers: `.kilo/scripts/kanban.ps1` (gh CLI + Projects v2 GraphQL). Os hooks também estão embutidos em `/opsx:new`, `/opsx:ff`, `/opsx:apply` e `/opsx:archive`, então mesmo o fluxo manual aciona as etapas de Kanban/Git. Nunca commitar secrets; `mvn test` verde antes de qualquer merge na master.
 
 ## Stack obrigatória
 

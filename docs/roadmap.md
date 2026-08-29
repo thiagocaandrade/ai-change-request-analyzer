@@ -6,9 +6,9 @@ Plano consolidado das fases originais (chat) em **10 changes OpenSpec**, na orde
 
 | # | Change | Escopo | Fases originais consolidadas | Status |
 |---|--------|--------|------------------------------|--------|
-| 01 | `foundation` | Esqueleto executável ponta a ponta: Spring Boot + sidecar Python LangGraph (grafo stub), Postgres+pgvector via compose, trace_id, logs JSON, CI, health | FASE 0–4 + pipeline base | **ATIVA** (tasks 4–6 pendentes) |
-| 02 | `domain-and-api` | Domínio completo: `ChangeRequest`, `ChangeAnalysis`, `ImpactFinding`, `RiskAssessment`, `TestRecommendation`, `Approval`; regras determinísticas (HIGH → approval obrigatório, confidence validada); testes unitários | FASE 5 | pendente |
-| 03 | `langgraph-orchestration` | Grafo completo com 13 nós, paralelização, branching e condição de parada | FASE 6 | pendente |
+| 01 | `foundation` | Esqueleto executável ponta a ponta: Spring Boot + sidecar Python LangGraph (grafo stub), Postgres+pgvector via compose, trace_id, logs JSON, CI, health | FASE 0–4 + pipeline base | **concluída** (arquivada 2026-08-29) |
+| 02 | `domain-and-api` | Domínio completo: `ChangeRequest`, `ChangeAnalysis`, `ImpactFinding`, `RiskAssessment`, `TestRecommendation`, `Approval`; regras determinísticas (HIGH → approval obrigatório, confidence validada); testes unitários | FASE 5 | **concluída** (arquivada 2026-08-29) |
+| 03 | `langgraph-orchestration` | Grafo completo com 13 nós, paralelização, branching e condição de parada | FASE 6 | **concluída** (arquivada 2026-08-29) |
 | 04 | `ai-rag-memory-tools` | Spring AI (prompts versionados, structured output, retry), 4 tools (1 via MCP), RAG pgvector, memória persistente | FASE 7, 8, 9, 10, 11 | pendente |
 | 05 | `security-and-human-approval` | Prompt injection, `SecurityAssessment`, endpoint de approval PENDING/APPROVED/REJECTED | FASE 12, 13 | pendente |
 | 06 | `observability-and-resilience` | Logs JSON + métricas + correlação por trace_id; timeout/retry/backoff/fallback em LLM, MCP, RAG e tools | FASE 14, 15 | pendente |
