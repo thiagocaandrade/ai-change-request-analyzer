@@ -1,8 +1,9 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 """Smoke test E2E do fluxo completo.
 
 Sobe a stack via docker compose e valida:
-- POST /requests retorna 201 com status COMPLETED;
+- POST /api/change-requests retorna 201 com status COMPLETED;
+- a analise do agente (grafo LangGraph completo) e persistida com risco;
 - o trace_id da resposta aparece correlacionado nos logs dos servicos app e agent.
 """
 
@@ -21,7 +22,7 @@ def post_request():
         {"text": "Alterar o desconto de clientes VIP de 10% para 15%"}
     ).encode("utf-8")
     request = urllib.request.Request(
-        APP_URL + "/requests",
+        APP_URL + "/api/change-requests",
         data=body,
         headers={"Content-Type": "application/json"},
         method="POST",
@@ -33,7 +34,7 @@ def post_request():
             payload = json.loads(response.read().decode("utf-8"))
     except urllib.error.HTTPError as error:
         detail = error.read().decode("utf-8", errors="replace")
-        raise SystemExit(f"POST /requests falhou com HTTP {error.code}: {detail}") from error
+        raise SystemExit(f"POST /api/change-requests falhou com HTTP {error.code}: {detail}") from error
     return status, header_trace_id, payload
 
 
@@ -86,3 +87,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
