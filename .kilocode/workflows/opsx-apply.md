@@ -85,6 +85,10 @@ Implement tasks from an OpenSpec change.
    - Mark task complete in the tasks file: `- [ ]` → `- [x]`
    - Continue to next task
 
+   **Kanban + git (fluxo automatizado):** se existir `.kilo/flow/<name>.json`, antes de implementar o primeiro task carregue `. .kilo/scripts/kanban.ps1` e certifique-se de estar na branch `feature/<name>` (criada a partir de master na Fase 2 do `/opsx-flow`; se não existir, `git checkout master` + `git checkout -b feature/<name>`). A cada grupo `## N.` do tasks.md concluído (todas as tasks do grupo `- [x]` e verificação indicada passando):
+   - Subtarefa correspondente → `InProgress` ao iniciar o grupo; → `InReview` ao concluir (`Set-KanbanStatus` com o itemId do estado)
+   - `git add -A` e `git commit -m "[NN.M] <título da subtarefa>"` (um commit por subtarefa; detalhes na Fase 3 de `.kilo/workflows/opsx-flow.md`)
+
    **Pause if:**
    - Task is unclear → ask for clarification
    - Implementation reveals a design issue → suggest updating artifacts

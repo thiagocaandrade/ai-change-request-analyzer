@@ -141,6 +141,16 @@ Archive a completed change in the experimental workflow.
    - Spec sync status (synced / sync skipped / no delta specs)
    - Note about any warnings (incomplete artifacts/tasks)
 
+7. **Entrega Git + Kanban (fluxo automatizado)**
+
+   Se existir `.kilo/flow/<name>.json`, execute a Fase 4 (`deliver`) de `.kilo/workflows/opsx-flow.md` após o archive:
+
+   - Carregue `. .kilo/scripts/kanban.ps1` e leia o estado.
+   - Para cada subtarefa `[NN.M]` em ordem: branch `feature/<name>-<nn.m>` a partir de master, cherry-pick do commit do grupo, push, PR + `gh pr merge --merge --delete-branch` (fallback: merge direto + push), depois `Set-KanbanStatus ... Done` + `Close-KanbanIssue`.
+   - Pai `[NN]`: branch de integração `feature/<name>`; tramitar → `Done` + `Close-KanbanIssue` após todas as subtarefas mergeadas.
+   - Atualizar `docs/roadmap.md` e o estado (`phase="done"`).
+   - Pré-condição obrigatória: `mvn test` verde antes de qualquer merge na master.
+
 **Output On Success**
 
 ```markdown
