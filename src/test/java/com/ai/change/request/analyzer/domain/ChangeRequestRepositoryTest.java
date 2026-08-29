@@ -29,5 +29,21 @@ class ChangeRequestRepositoryTest {
     assertThat(loaded.get().getStatus()).isEqualTo(ChangeRequestStatus.PENDING);
     assertThat(loaded.get().getTraceId()).isEqualTo("trace-123");
     assertThat(loaded.get().getCreatedAt()).isNotNull();
+    assertThat(loaded.get().getAnalysis()).isNull();
+    assertThat(loaded.get().getApproval()).isNull();
+  }
+
+  @Test
+  void persistsFailureReason() {
+    ChangeRequest request = new ChangeRequest();
+    request.setText("Alterar o desconto de clientes VIP de 10% para 15%.");
+    request.setStatus(ChangeRequestStatus.FAILED);
+    request.setTraceId("trace-failed");
+    request.setFailureReason("agent_unavailable: timeout");
+    repository.save(request);
+
+    Optional<ChangeRequest> loaded = repository.findById(request.getId());
+    assertThat(loaded).isPresent();
+    assertThat(loaded.get().getFailureReason()).isEqualTo("agent_unavailable: timeout");
   }
 }
