@@ -31,3 +31,13 @@ build/
 
 ### VS Code ###
 .vscode/
+
+### Secrets ###
+.env
+
+### Python ###
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
