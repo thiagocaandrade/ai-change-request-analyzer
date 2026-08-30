@@ -72,9 +72,7 @@ public class QaRecordService {
               });
     } catch (IllegalArgumentException e) {
       log.warn(
-          "qa_record_invalid_request_id request_id={} trace_id={}",
-          requestId,
-          MDC.get("trace_id"));
+          "qa_record_invalid_request_id request_id={} trace_id={}", requestId, MDC.get("trace_id"));
     }
   }
 
@@ -130,10 +128,7 @@ public class QaRecordService {
         }
         record.addFinding(
             new QaFinding(
-                finding.component(),
-                finding.description(),
-                finding.severity(),
-                finding.source()));
+                finding.component(), finding.description(), finding.severity(), finding.source()));
       }
       qaReviewRecordRepository.save(record);
     } catch (Exception e) {

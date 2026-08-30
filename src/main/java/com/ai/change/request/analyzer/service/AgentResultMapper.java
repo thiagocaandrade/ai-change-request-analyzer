@@ -113,7 +113,10 @@ public class AgentResultMapper {
         }
         findings.add(
             new QaFindingDto(
-                component, description, stringOf(map.get("severity")), stringOf(map.get("source"))));
+                component,
+                description,
+                stringOf(map.get("severity")),
+                stringOf(map.get("source"))));
       }
     }
     List<RiskMatrixEntryDto> matrix = new ArrayList<>();

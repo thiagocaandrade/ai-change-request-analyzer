@@ -54,10 +54,7 @@ class QaServiceTest {
       new CodeReviewResult(
           List.of(
               new CodeReviewFindingDto(
-                  "discount-service",
-                  "teste de regressao ausente",
-                  "HIGH",
-                  "business-rules.md")),
+                  "discount-service", "teste de regressao ausente", "HIGH", "business-rules.md")),
           List.of(),
           false);
 
@@ -119,7 +116,8 @@ class QaServiceTest {
                 false),
             new TestPlanResult(
                 List.of(
-                    new TestRecommendationDto("discount-service", "testar regra de desconto", "HIGH")),
+                    new TestRecommendationDto(
+                        "discount-service", "testar regra de desconto", "HIGH")),
                 false));
 
     QaService.QaOutcome outcome =
@@ -134,9 +132,7 @@ class QaServiceTest {
     verify(aiAnalysisService, times(2)).generateTestPlan(anyString(), evidence.capture());
     assertThat(evidence.getAllValues().get(1)).contains("[FEEDBACK]");
     assertThat(evidence.getAllValues().get(1)).contains("billing-api");
-    assertThat(
-            meterRegistry.get(AnalysisMetrics.QA_REFINEMENTS).counter().count())
-        .isEqualTo(1.0);
+    assertThat(meterRegistry.get(AnalysisMetrics.QA_REFINEMENTS).counter().count()).isEqualTo(1.0);
     verify(traceEventRepository, times(2))
         .save(Mockito.<TraceEvent>argThat(event -> "qa_refinement".equals(event.getNode())));
   }

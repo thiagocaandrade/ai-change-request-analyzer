@@ -107,8 +107,7 @@ class ChangeAnalysisRepositoryTest {
             .findFirst()
             .orElseThrow();
     assertThat(prioritized.getPriorityJustification()).contains("matriz deterministica");
-    assertThat(prioritized.getRiskCategory())
-        .isEqualTo("financial_business_rule_regression");
+    assertThat(prioritized.getRiskCategory()).isEqualTo("financial_business_rule_regression");
     assertThat(prioritized.getRefined()).isTrue();
     TestRecommendation unrefined =
         loaded.getAnalysis().getRecommendations().stream()

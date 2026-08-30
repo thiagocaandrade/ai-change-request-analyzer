@@ -18,9 +18,9 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * Registro de uma execucao de etapa QA (revisao de codigo ou geracao/refinamento de testes):
- * prompt versionado usado, resultado estruturado, iteracoes, flag de degradacao e trace_id,
- * vinculado a solicitacao (e a analise, quando ja existente).
+ * Registro de uma execucao de etapa QA (revisao de codigo ou geracao/refinamento de testes): prompt
+ * versionado usado, resultado estruturado, iteracoes, flag de degradacao e trace_id, vinculado a
+ * solicitacao (e a analise, quando ja existente).
  */
 @Entity
 @Table(name = "qa_review_record")

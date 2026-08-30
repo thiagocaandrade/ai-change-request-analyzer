@@ -43,9 +43,7 @@ class RiskMatrixServiceTest {
         service.evaluate(
             List.of(
                 new RiskCategorySuggestionDto(
-                    RiskMatrixService.CATEGORY_FINANCIAL_BUSINESS_RULE_REGRESSION,
-                    "HIGH",
-                    "LOW"),
+                    RiskMatrixService.CATEGORY_FINANCIAL_BUSINESS_RULE_REGRESSION, "HIGH", "LOW"),
                 new RiskCategorySuggestionDto(
                     RiskMatrixService.CATEGORY_PROMPT_INJECTION, "high", "baixa")),
             "Alterar o desconto de clientes VIP de 10% para 15%.");
@@ -53,8 +51,7 @@ class RiskMatrixServiceTest {
     assertThat(assessments).hasSize(4);
     assertThat(assessments)
         .allMatch(
-            assessment ->
-                RiskMatrixService.REQUIRED_CATEGORIES.contains(assessment.category()));
+            assessment -> RiskMatrixService.REQUIRED_CATEGORIES.contains(assessment.category()));
 
     RiskCategoryAssessment financial =
         assessments.stream()
@@ -124,18 +121,17 @@ class RiskMatrixServiceTest {
 
   @Test
   void categoryForAndTopPriorityFollowDeterministicRules() {
-    assertThat(service.categoryFor("cobrir teste do desconto VIP")).isEqualTo(
-        RiskMatrixService.CATEGORY_FINANCIAL_BUSINESS_RULE_REGRESSION);
-    assertThat(service.categoryFor("teste de acesso a ferramenta")).isEqualTo(
-        RiskMatrixService.CATEGORY_UNAUTHORIZED_TOOL_ACCESS);
+    assertThat(service.categoryFor("cobrir teste do desconto VIP"))
+        .isEqualTo(RiskMatrixService.CATEGORY_FINANCIAL_BUSINESS_RULE_REGRESSION);
+    assertThat(service.categoryFor("teste de acesso a ferramenta"))
+        .isEqualTo(RiskMatrixService.CATEGORY_UNAUTHORIZED_TOOL_ACCESS);
     assertThat(service.categoryFor("teste generico sem palavra chave")).isNull();
 
-    List<RiskCategoryAssessment> assessments =
-        service.evaluate(List.of(), "Alterar desconto VIP");
+    List<RiskCategoryAssessment> assessments = service.evaluate(List.of(), "Alterar desconto VIP");
     RiskCategoryAssessment top = service.topPriority(assessments);
     assertThat(top).isNotNull();
     assertThat(top.priority()).isEqualTo(Priority.HIGH);
-    assertThat(top.category()).isEqualTo(
-        RiskMatrixService.CATEGORY_FINANCIAL_BUSINESS_RULE_REGRESSION);
+    assertThat(top.category())
+        .isEqualTo(RiskMatrixService.CATEGORY_FINANCIAL_BUSINESS_RULE_REGRESSION);
   }
 }

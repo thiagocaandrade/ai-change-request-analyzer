@@ -318,7 +318,8 @@ public class AgentGatewayController {
         recommendation.refined());
   }
 
-  private QaFindingDto toQaFinding(com.ai.change.request.analyzer.ai.dto.AiResults.CodeReviewFindingDto finding) {
+  private QaFindingDto toQaFinding(
+      com.ai.change.request.analyzer.ai.dto.AiResults.CodeReviewFindingDto finding) {
     return new QaFindingDto(
         finding.component(), finding.description(), finding.severity(), finding.source());
   }

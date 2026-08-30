@@ -28,6 +28,6 @@
 
 ## 5. Testes E2E dos cenários + evidência 09-ai-code-review.png
 
-- [ ] 5.1 E2E Cenário A (VIP 10%→15%): análise completa pela API com QA ativo — findings do review, recomendações priorizadas com justificativa e registro QA persistidos e recuperáveis; verificar teste E2E verde e `mvn test` completo
-- [ ] 5.2 E2E adversarial: conteúdo recuperado com instrução injetada não altera findings/prioridades do QA e evento de segurança continua registrado; verificar teste E2E verde
-- [ ] 5.3 Registrar evidência `docs/evidence/09-ai-code-review.png` (resultado do QA: findings, matriz de priorização e recomendações) e atualizar README (seção QA + matriz de requisitos: AI code review, AI test generation, risk-based testing); verificar presença do arquivo e consistência do README
+- [x] 5.1 E2E Cenário A (VIP 10%→15%): análise completa pela API com QA ativo — findings do review, recomendações priorizadas com justificativa e registro QA persistidos e recuperáveis; verificar teste E2E verde e `mvn test` completo
+- [x] 5.2 E2E adversarial: conteúdo recuperado com instrução injetada não altera findings/prioridades do QA e evento de segurança continua registrado; verificar teste E2E verde
+- [x] 5.3 Registrar evidência `docs/evidence/09-ai-code-review.png` (resultado do QA: findings, matriz de priorização e recomendações) e atualizar README (seção QA + matriz de requisitos: AI code review, AI test generation, risk-based testing); verificar presença do arquivo e consistência do README

@@ -53,7 +53,9 @@ public class AnalysisMetrics {
             .description("Saidas de LLM invalidas rejeitadas")
             .register(registry);
     this.qaReviews =
-        Counter.builder(QA_REVIEWS).description("Execucoes de code review com IA").register(registry);
+        Counter.builder(QA_REVIEWS)
+            .description("Execucoes de code review com IA")
+            .register(registry);
     this.qaRefinements =
         Counter.builder(QA_REFINEMENTS)
             .description("Iteracoes de refinamento de recomendacoes de teste")

@@ -13,7 +13,6 @@ import com.ai.change.request.analyzer.ai.dto.AiResults.CodeReviewResult;
 import com.ai.change.request.analyzer.ai.dto.AiResults.TestPlanResult;
 import com.ai.change.request.analyzer.ai.dto.AiResults.TestRecommendationDto;
 import com.ai.change.request.analyzer.observability.AnalysisMetrics;
-import com.ai.change.request.analyzer.observability.TraceEvent;
 import com.ai.change.request.analyzer.observability.TraceEventRepository;
 import com.ai.change.request.analyzer.observability.TraceService;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -80,18 +79,18 @@ class QaTraceEventTest {
                         "discount-service", "cobrir regra de desconto", "HIGH")),
                 false));
 
-    qaService.generateTestPlanWithQa(
-        "Alterar desconto VIP", null, Map.of(), Map.of(), List.of());
+    qaService.generateTestPlanWithQa("Alterar desconto VIP", null, Map.of(), Map.of(), List.of());
 
     List<String> events =
         traceService.findByTraceId("trace-qa-events").stream()
             .map(event -> event.getNode() + ":" + event.getEvent())
             .toList();
-    assertThat(events).containsSubsequence(
-        "qa_review:started",
-        "qa_review:completed",
-        "qa_refinement:refining",
-        "qa_refinement:completed");
+    assertThat(events)
+        .containsSubsequence(
+            "qa_review:started",
+            "qa_review:completed",
+            "qa_refinement:refining",
+            "qa_refinement:completed");
     assertThat(traceEventRepository.findByTraceIdOrderByCreatedAtAsc("trace-qa-events"))
         .allSatisfy(event -> assertThat(event.getTraceId()).isEqualTo("trace-qa-events"));
   }

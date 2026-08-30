@@ -11,8 +11,8 @@ import org.springframework.stereotype.Service;
 /**
  * Matriz de priorizacao de testes 100% deterministica: combinacao fixa Impact x Likelihood →
  * prioridade, calculada SEMPRE pela aplicacao. O modelo apenas SUGERE impacto e probabilidade por
- * categoria; sugestoes fora de faixa sao normalizadas e a prioridade final nunca vem diretamente
- * da sugestao.
+ * categoria; sugestoes fora de faixa sao normalizadas e a prioridade final nunca vem diretamente da
+ * sugestao.
  */
 @Service
 public class RiskMatrixService {
@@ -235,8 +235,18 @@ public class RiskMatrixService {
     map.put(
         CATEGORY_FINANCIAL_BUSINESS_RULE_REGRESSION,
         List.of(
-            "desconto", "discount", "preço", "preco", "price", "vip", "financeir", "tarifa",
-            "comissão", "comissao", "cobrança", "cobranca"));
+            "desconto",
+            "discount",
+            "preço",
+            "preco",
+            "price",
+            "vip",
+            "financeir",
+            "tarifa",
+            "comissão",
+            "comissao",
+            "cobrança",
+            "cobranca"));
     return Map.copyOf(map);
   }
 }

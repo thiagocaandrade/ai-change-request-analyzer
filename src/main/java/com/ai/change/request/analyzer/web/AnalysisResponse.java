@@ -21,6 +21,5 @@ public record AnalysisResponse(
     QaView qa) {
 
   /** Visao dos registros QA persistidos da solicitacao para a pagina de resultado. */
-  public record QaView(
-      List<QaFindingDto> findings, List<QaRecordDto> records, boolean degraded) {}
+  public record QaView(List<QaFindingDto> findings, List<QaRecordDto> records, boolean degraded) {}
 }

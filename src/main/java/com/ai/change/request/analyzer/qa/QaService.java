@@ -156,7 +156,8 @@ public class QaService {
 
     List<RiskMatrixService.RiskCategoryAssessment> matrix =
         riskMatrixService.evaluate(review.result().riskCategories(), changeText);
-    RiskMatrixService.RiskCategoryAssessment fallbackCategory = riskMatrixService.topPriority(matrix);
+    RiskMatrixService.RiskCategoryAssessment fallbackCategory =
+        riskMatrixService.topPriority(matrix);
 
     List<QaRecommendation> recommendations = new ArrayList<>();
     for (TestRecommendationDto item : items) {
@@ -188,9 +189,9 @@ public class QaService {
   }
 
   /**
-   * Anexa prioridade derivada da matriz: a categoria e escolhida por palavras-chave
-   * deterministicas (ou a categoria aplicavel de maior prioridade); a prioridade final vem sempre
-   * da combinacao Impact x Likelihood calculada pela aplicacao.
+   * Anexa prioridade derivada da matriz: a categoria e escolhida por palavras-chave deterministicas
+   * (ou a categoria aplicavel de maior prioridade); a prioridade final vem sempre da combinacao
+   * Impact x Likelihood calculada pela aplicacao.
    */
   private QaRecommendation toQaRecommendation(
       TestRecommendationDto item,
@@ -198,12 +199,17 @@ public class QaService {
       RiskMatrixService.RiskCategoryAssessment fallbackCategory,
       boolean refined) {
     String text =
-        (item.component() == null ? "" : item.component()) + " " + (item.description() == null ? "" : item.description());
+        (item.component() == null ? "" : item.component())
+            + " "
+            + (item.description() == null ? "" : item.description());
     String category = riskMatrixService.categoryFor(text);
     RiskMatrixService.RiskCategoryAssessment assessment = null;
     if (category != null) {
       assessment =
-          matrix.stream().filter(entry -> entry.category().equals(category)).findFirst().orElse(null);
+          matrix.stream()
+              .filter(entry -> entry.category().equals(category))
+              .findFirst()
+              .orElse(null);
     }
     if (assessment == null || !assessment.applicable()) {
       assessment = fallbackCategory;
@@ -279,7 +285,12 @@ public class QaService {
   }
 
   private String feedbackDetail(List<TestRecommendationDto> items, Set<String> knownComponents) {
-    return "itens_invalidos=" + toJson(items.stream().filter(item -> isInvalid(item, knownComponents)).map(TestRecommendationDto::component).toList());
+    return "itens_invalidos="
+        + toJson(
+            items.stream()
+                .filter(item -> isInvalid(item, knownComponents))
+                .map(TestRecommendationDto::component)
+                .toList());
   }
 
   private List<Map<String, Object>> toFindingMaps(CodeReviewResult review) {
@@ -318,6 +329,8 @@ public class QaService {
     if (json == null) {
       return null;
     }
-    return json.length() > MAX_RESULT_JSON_LENGTH ? json.substring(0, MAX_RESULT_JSON_LENGTH) : json;
+    return json.length() > MAX_RESULT_JSON_LENGTH
+        ? json.substring(0, MAX_RESULT_JSON_LENGTH)
+        : json;
   }
 }

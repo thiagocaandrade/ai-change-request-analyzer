@@ -8,5 +8,6 @@ public interface QaReviewRecordRepository extends JpaRepository<QaReviewRecord, 
 
   List<QaReviewRecord> findByChangeRequestIdOrderByCreatedAtAsc(UUID changeRequestId);
 
-  boolean existsByChangeRequestIdAndStageAndTraceId(UUID changeRequestId, String stage, String traceId);
+  boolean existsByChangeRequestIdAndStageAndTraceId(
+      UUID changeRequestId, String stage, String traceId);
 }

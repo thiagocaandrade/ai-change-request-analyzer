@@ -41,13 +41,11 @@ class QaReviewRecordPersistenceTest {
             Instant.now());
     record.addFinding(
         new QaFinding(
-            "discount-service",
-            "teste de regressao ausente",
-            "HIGH",
-            "business-rules.md"));
+            "discount-service", "teste de regressao ausente", "HIGH", "business-rules.md"));
     qaReviewRecordRepository.save(record);
 
-    List<QaReviewRecord> records = qaReviewRecordRepository.findByChangeRequestIdOrderByCreatedAtAsc(request.getId());
+    List<QaReviewRecord> records =
+        qaReviewRecordRepository.findByChangeRequestIdOrderByCreatedAtAsc(request.getId());
     assertThat(records).hasSize(1);
     QaReviewRecord loaded = records.get(0);
     assertThat(loaded.getStage()).isEqualTo("CODE_REVIEW");
@@ -75,7 +73,14 @@ class QaReviewRecordPersistenceTest {
 
     QaReviewRecord record =
         new QaReviewRecord(
-            request, "TEST_GENERATION", "test-generation-v1", "{}", true, 2, "trace-qa-link", Instant.now());
+            request,
+            "TEST_GENERATION",
+            "test-generation-v1",
+            "{}",
+            true,
+            2,
+            "trace-qa-link",
+            Instant.now());
     record.setAnalysis(analysis);
     qaReviewRecordRepository.save(record);
 
@@ -89,9 +94,7 @@ class QaReviewRecordPersistenceTest {
         .isFalse();
 
     QaReviewRecord loaded =
-        qaReviewRecordRepository
-            .findByChangeRequestIdOrderByCreatedAtAsc(request.getId())
-            .get(0);
+        qaReviewRecordRepository.findByChangeRequestIdOrderByCreatedAtAsc(request.getId()).get(0);
     assertThat(loaded.getAnalysis()).isNotNull();
     assertThat(loaded.isDegraded()).isTrue();
     assertThat(loaded.getIterations()).isEqualTo(2);

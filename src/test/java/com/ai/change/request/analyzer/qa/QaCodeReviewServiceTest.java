@@ -89,7 +89,8 @@ class QaCodeReviewServiceTest {
     when(ragService.search(anyString()))
         .thenReturn(
             new KnowledgeSearchResult(
-                List.of(new KnowledgeHit("business-rules.md", "business-rules", "c0", 0.9, injected)),
+                List.of(
+                    new KnowledgeHit("business-rules.md", "business-rules", "c0", 0.9, injected)),
                 false));
     CodeReviewResult modelResult =
         new CodeReviewResult(
@@ -115,8 +116,7 @@ class QaCodeReviewServiceTest {
 
   @Test
   void degradedRagMarksOutcomeDegradedWithEmptyDocuments() {
-    when(ragService.search(anyString()))
-        .thenReturn(new KnowledgeSearchResult(List.of(), true));
+    when(ragService.search(anyString())).thenReturn(new KnowledgeSearchResult(List.of(), true));
     when(aiAnalysisService.reviewCode(anyString(), anyString()))
         .thenReturn(new CodeReviewResult(List.of(), List.of(), true));
 

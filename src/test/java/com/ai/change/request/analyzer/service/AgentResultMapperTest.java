@@ -129,27 +129,30 @@ class AgentResultMapperTest {
         mapper.toAnalysis(
             request(),
             Map.of(
-                "risk", "HIGH",
-                "confidence", 0.9,
-                "rationale", "regra financeira",
+                "risk",
+                "HIGH",
+                "confidence",
+                0.9,
+                "rationale",
+                "regra financeira",
                 "qa",
-                    Map.of(
-                        "degraded", false,
-                        "recommendations",
-                            List.of(
-                                Map.of(
-                                    "component", "discount-service",
-                                    "description", "cobrir desconto VIP",
-                                    "priority", "HIGH",
-                                    "priorityJustification", "matriz deterministica",
-                                    "riskCategory", "financial_business_rule_regression",
-                                    "refined", true)))));
+                Map.of(
+                    "degraded",
+                    false,
+                    "recommendations",
+                    List.of(
+                        Map.of(
+                            "component", "discount-service",
+                            "description", "cobrir desconto VIP",
+                            "priority", "HIGH",
+                            "priorityJustification", "matriz deterministica",
+                            "riskCategory", "financial_business_rule_regression",
+                            "refined", true)))));
 
     assertThat(analysis.getRecommendations()).hasSize(1);
     var recommendation = analysis.getRecommendations().get(0);
     assertThat(recommendation.getPriorityJustification()).isEqualTo("matriz deterministica");
-    assertThat(recommendation.getRiskCategory())
-        .isEqualTo("financial_business_rule_regression");
+    assertThat(recommendation.getRiskCategory()).isEqualTo("financial_business_rule_regression");
     assertThat(recommendation.getRefined()).isTrue();
   }
 
@@ -159,14 +162,16 @@ class AgentResultMapperTest {
         mapper.toAnalysis(
             request(),
             Map.of(
-                "risk", "MEDIUM",
-                "confidence", 0.5,
+                "risk",
+                "MEDIUM",
+                "confidence",
+                0.5,
                 "test_plan",
-                    List.of(
-                        Map.of(
-                            "component", "unit",
-                            "description", "teste unitario",
-                            "priority", "MEDIUM"))));
+                List.of(
+                    Map.of(
+                        "component", "unit",
+                        "description", "teste unitario",
+                        "priority", "MEDIUM"))));
 
     assertThat(analysis.getRecommendations()).hasSize(1);
     assertThat(analysis.getRecommendations().get(0).getPriorityJustification()).isNull();

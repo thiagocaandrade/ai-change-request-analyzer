@@ -175,7 +175,10 @@ class AgentGatewayControllerTest {
             new CodeReviewResult(
                 List.of(
                     new CodeReviewFindingDto(
-                        "discount-service", "teste de regressao ausente", "HIGH", "business-rules.md")),
+                        "discount-service",
+                        "teste de regressao ausente",
+                        "HIGH",
+                        "business-rules.md")),
                 List.of(
                     new RiskCategorySuggestionDto(
                         "financial_business_rule_regression", "HIGH", "MEDIUM")),
@@ -213,7 +216,9 @@ class AgentGatewayControllerTest {
         .isEqualTo("financial_business_rule_regression");
     assertThat(qa.get("record").get("promptVersion").asText()).isEqualTo("code-review-v1");
 
-    var records = qaReviewRecordRepository.findByChangeRequestIdOrderByCreatedAtAsc(UUID.fromString(requestId));
+    var records =
+        qaReviewRecordRepository.findByChangeRequestIdOrderByCreatedAtAsc(
+            UUID.fromString(requestId));
     assertThat(records).hasSize(2);
     var reviewRecord = records.get(0);
     assertThat(reviewRecord.getStage()).isEqualTo("CODE_REVIEW");
@@ -258,10 +263,11 @@ class AgentGatewayControllerTest {
     JsonNode qa = body.get("qa");
     assertThat(qa.get("degraded").asBoolean()).isTrue();
     assertThat(qa.get("findings").isEmpty()).isTrue();
-    assertThat(qa.get("recommendations").get(0).get("priorityJustification").asText())
-        .isNotBlank();
+    assertThat(qa.get("recommendations").get(0).get("priorityJustification").asText()).isNotBlank();
 
-    var records = qaReviewRecordRepository.findByChangeRequestIdOrderByCreatedAtAsc(UUID.fromString(requestId));
+    var records =
+        qaReviewRecordRepository.findByChangeRequestIdOrderByCreatedAtAsc(
+            UUID.fromString(requestId));
     assertThat(records).hasSize(2);
     assertThat(records).allSatisfy(record -> assertThat(record.isDegraded()).isTrue());
   }

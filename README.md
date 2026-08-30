@@ -100,6 +100,26 @@ Uma tela server-side (sem SPA, sem framework JS) para operar o analisador pelo n
 - **Estilo:** `static/css/app.css` único (cabeçalho, cartões, badges por nível de risco/status, tabelas de eventos, layout responsivo).
 - **Evidência:** `docs/evidence/08-frontend.png` (formulário, resultado HIGH e página de trace); captura reproduzível via `.kilo/scripts/frontend-evidence.ps1` (renderiza as páginas com `FrontendEvidenceDumpTest` e captura com Edge headless).
 
+## QA com IA (code review, geração de testes e risco)
+
+A etapa QA roda dentro do estágio de geração de testes (`POST /api/agent/generate-test-plan`) — sem nó novo no grafo (os 13 nós do alvo permanecem). Fluxo: RAG (`coding-guidelines` + `business-rules` como dado) → **code review com IA** → **matriz de risco determinística** → **geração/refinamento de recomendações** → resposta com bloco `qa` (findings + recomendações priorizadas + matriz + registro).
+
+- **Code review com IA** (`qa/QaCodeReviewService` + estágio `CODE_REVIEW` do `AiAnalysisService`): prompt versionado `resources/prompts/code-review-v1.txt` (schema JSON de findings com `component`, `description`, `severity` e `source`; máximo 8; seção `DADOS NÃO CONFIÁVEIS`), structured output validado (Bean Validation), retry máx. 2 com backoff, fallback determinístico marcado (`degraded=true`). A revisão apenas produz findings — **nunca altera arquivos do repositório**.
+- **Matriz Impact × Likelihood 100% determinística** (`qa/RiskMatrixService`): a combinação Impacto (LOW/MEDIUM/HIGH) × Probabilidade (LOW/MEDIUM/HIGH) define a prioridade por tabela fixa (ex.: HIGH×MEDIUM → HIGH; MEDIUM×MEDIUM → MEDIUM); o modelo apenas sugere impacto/probabilidade por categoria, sugestões fora de faixa são normalizadas e **a prioridade final nunca vem da sugestão**. As 4 categorias obrigatórias são avaliadas em toda análise: `prompt_injection`, `unauthorized_tool_access`, `incorrect_high_low_classification` e `financial_business_rule_regression` (indício no texto, ex.: "desconto", aplica defaults determinísticos HIGH×MEDIUM).
+- **Geração/refinamento com IA** (`qa/QaService`): recomendações geradas com os findings de QA como evidência; item inválido/incompleto (descrição/componente vazio ou componente fora dos findings) dispara até **2 iterações de refinamento** com feedback registrado como trace event (`qa_refinement`) e no registro QA; esgotado o limite, a recomendação permanece marcada como não refinada. Sem modelo, o fluxo segue degradado com fallback determinístico **com justificativa presente**.
+- **Persistência** (`QaReviewRecord` + `QaFinding`, tabelas `qa_review_record`/`qa_finding`): prompt versionado usado, resultado estruturado (JSON truncado), degradação, iterações e `trace_id` por execução — revisão e geração, vinculadas à solicitação (e à análise) e recuperáveis por `GET /api/change-requests/{id}/analysis`; dedupe por (request, stage, traceId).
+- **Exibição** (`result.html`): seção "QA com IA (code review)" com os findings e indicação explícita de QA degradado; a tabela de testes recomendados mostra prioridade, categoria de risco e justificativa da matriz. Todo conteúdo renderizado com `th:text` (escapado).
+- **Observabilidade:** trace events `qa_review`/`qa_refinement` correlacionados por `trace_id` e métricas `qa_reviews`/`qa_refinements`.
+- **Evidência:** `docs/evidence/09-ai-code-review.png` (resultado com findings, matriz e recomendações priorizadas + trace com eventos QA); captura reproduzível via `.kilo/scripts/qa-evidence.ps1`.
+
+Matriz desta change:
+
+| Requisito | Implementação | Evidência | Teste |
+|---|---|---|---|
+| AI code review | `qa/QaCodeReviewService` + estágio `CODE_REVIEW` + `prompts/code-review-v1.txt` | `docs/evidence/09-ai-code-review.png` | `QaCodeReviewServiceTest` / `AiAnalysisServiceTest` |
+| AI test generation / refinement | `qa/QaService` (geração + refinamento máx. 2 com feedback registrado) | idem (trace `qa_refinement`) | `QaServiceTest` / `QaTraceEventTest` |
+| Risk-based testing | `qa/RiskMatrixService` (tabela Impact × Likelihood determinística, 4 categorias) | idem (matriz na página) | `RiskMatrixServiceTest` / `QaE2ETest` |
+
 ## Execução via Docker Compose
 
 Pré-requisitos: Docker (com Compose v2) e Docker Desktop em execução.
@@ -197,8 +217,8 @@ Toda configuração é fornecida por variáveis de ambiente (referência em `.en
 |---|---|---|---|
 | `app` | POST | `/api/change-requests` | Cria e analisa uma solicitação de alteração |
 | `app` | GET | `/api/change-requests/{id}` | Consulta status e resumo da análise de uma solicitação |
-| `app` | POST | `/api/change-requests/{id}/analysis` | Registra análise estruturada (achados, risco, recomendações de teste) |
-| `app` | GET | `/api/change-requests/{id}/analysis` | Consulta a análise completa tipada, incluindo avaliação de segurança |
+| `app` | POST | `/api/change-requests/{id}/analysis` | Registra análise estruturada (achados, risco, recomendações de teste priorizadas; bloco `qa` opcional) |
+| `app` | GET | `/api/change-requests/{id}/analysis` | Consulta a análise completa tipada, incluindo avaliação de segurança e registros QA |
 | `app` | POST | `/api/change-requests/{id}/approval` | Decisão humana (APPROVED\|REJECTED) para análise com aprovação exigida |
 | `app` | GET | `/api/traces/{traceId}` | Reconstrução da execução: eventos de auditoria em ordem cronológica (404 sem eventos) |
 | `app` | GET | `/` | Página web: formulário de solicitação (Thymeleaf) |
@@ -208,7 +228,7 @@ Toda configuração é fornecida por variáveis de ambiente (referência em `.en
 | `app` | POST | `/traces` | Consulta de trace pela página (redireciona para `/traces/{traceId}`) |
 | `app` | GET | `/traces/{traceId}` | Página web: reconstrução da execução com documentos recuperados |
 | `app` | GET | `/actuator/health` | Health check |
-| `app` | GET | `/actuator/metrics` | Métricas Micrometer (`analysis_duration`, `llm_calls`, `tool_calls`, `tool_errors`, `high_risk_changes`, `prompt_injection_count`, `validation_failures`) |
+| `app` | GET | `/actuator/metrics` | Métricas Micrometer (`analysis_duration`, `llm_calls`, `tool_calls`, `tool_errors`, `high_risk_changes`, `prompt_injection_count`, `validation_failures`, `qa_reviews`, `qa_refinements`) |
 | `app` | POST | `/api/agent/classify` | Classificação da solicitação (IA/fallback marcado) |
 | `app` | POST | `/api/agent/analyze-code` | Evidência de código e testes via tools (com varredura de injeção) |
 | `app` | POST | `/api/agent/retrieve-knowledge` | Busca RAG com fontes e scores (com varredura de injeção) |
@@ -216,7 +236,7 @@ Toda configuração é fornecida por variáveis de ambiente (referência em `.en
 | `app` | POST | `/api/agent/security-assessment` | Avaliação de segurança tipada (`detected`, `events`) do texto da solicitação |
 | `app` | POST | `/api/agent/analyze-impact` | Achados de impacto (IA sobre evidências) |
 | `app` | POST | `/api/agent/assess-risk` | Sugestão de risco (IA; regra final no Java) |
-| `app` | POST | `/api/agent/generate-test-plan` | Recomendações de testes (IA/fallback marcado) |
+| `app` | POST | `/api/agent/generate-test-plan` | QA: code review → matriz de risco → recomendações priorizadas com justificativa (bloco `qa`; degradação marcada) |
 | `app` | POST | `/mcp` | Servidor MCP (JSON-RPC streamable HTTP): `search_code`, `get_file` |
 | `agent` | POST | `/analyze` | Executa o grafo de análise (corpo `{request_id, text}`) |
 | `agent` | GET | `/health` | Health check |
@@ -225,7 +245,7 @@ Toda configuração é fornecida por variáveis de ambiente (referência em `.en
 
 - **Logs JSON com campos padronizados** (`logstash-logback-encoder`, sem mudanças no logback): toda linha carrega `trace_id` e `request_id` do MDC (gerados no `TraceIdFilter`, que também loga `node=http`, `event=request_started/request_finished`, `status` e `duration_ms`); componentes instrumentados emitem `node`, `event`, `duration_ms`, `status`, `error`, `risk`, `tool` e `model` — `ChangeRequestController` e `AnalysisService` (pipeline, com `risk`), `AgentGatewayController` (started/completed por endpoint do grafo), `AiAnalysisService` (`model`), `ResilientToolCallback` (`tool`), `RagService`, `AgentClient` e `ResilienceExecutor` (cada tentativa).
 - **Segundo sinal — auditoria persistida:** cada evento é gravado na tabela `trace_event` (trace_id, request_id, node, event, duration_ms, status, error, risk, tool, model, detail, createdAt) via `TraceService`; `GET /api/traces/{traceId}` reconstrói a execução em ordem cronológica (404 para trace inexistente). Falha de persistência de telemetria é registrada e nunca derruba a análise; nenhum evento contém segredos.
-- **Métricas (terceiro sinal complementar):** `AnalysisMetrics` (Micrometer via Actuator) registra `analysis_duration`, `llm_calls`, `tool_calls`, `tool_errors`, `high_risk_changes`, `prompt_injection_count` e `validation_failures`, expostas em `/actuator/metrics`.
+- **Métricas (terceiro sinal complementar):** `AnalysisMetrics` (Micrometer via Actuator) registra `analysis_duration`, `llm_calls`, `tool_calls`, `tool_errors`, `high_risk_changes`, `prompt_injection_count`, `validation_failures`, `qa_reviews` e `qa_refinements`, expostas em `/actuator/metrics`.
 - `agent`: structlog em JSON usando o `trace_id` do cabeçalho (gera um próprio se ausente).
 - Todos os sinais correlacionam-se pelo mesmo `trace_id` — fluxo, decisões, erros e latência de uma execução são investigáveis de ponta a ponta. Evidência: `docs/evidence/07-observability.png`.
 
@@ -237,8 +257,8 @@ Toda configuração é fornecida por variáveis de ambiente (referência em `.en
 
 ## Testes e CI
 
-- Java: `./mvnw test` (happy path, segurança/path traversal, structured output com ChatModel fake, detecção determinística de injeção, endpoint de aprovação 200/400/404/409, RAG com VectorStore mockado, memória com H2, MCP, controller `/api/agent`, reconstrução de trace com `TraceTest`/`TraceEndpointTest`, páginas web com `WebUiTest`/`TraceViewTest`/`WebE2ETest` — formulário válido/vazio, resultado HIGH com aprovação refletida, falha do agente, 404 amigável, escaping de HTML, eventos ordenados com documentos recuperados, Cenários A/B pelas páginas, cenários integrados de resiliência com `ResilienceTest`, métricas com `AnalysisMetricsTest`/`MetricsInstrumentationTest`, executor com `ResilienceExecutorTest`) e `./mvnw spotless:check`. Suíte inteira verde **sem chave de API**.
-- Python (em `agent/`): `pytest` e `ruff check .` — cobre o grafo nos cenários do roadmap (happy path, high risk, prompt injection com avaliação obtida da aplicação, endpoint de segurança indisponível, tool failure, validation failure, max iteration), aplicação indisponível, paralelismo e propagação de trace_id, com client HTTP mockado.
+- Java: `./mvnw test` (happy path, segurança/path traversal, structured output com ChatModel fake, detecção determinística de injeção, endpoint de aprovação 200/400/404/409, RAG com VectorStore mockado, memória com H2, MCP, controller `/api/agent`, QA com `QaCodeReviewServiceTest`/`QaServiceTest`/`RiskMatrixServiceTest`/`QaReviewRecordPersistenceTest`/`QaTraceEventTest`/`ResultPageQaTest`/`QaE2ETest` — review com prompt versionado, refinamento limitado nos 3 caminhos, tabela completa da matriz, fluxo QA sem modificar o repositório, persistência H2, reconstrução por trace_id, página com QA completo/degradado/escapado, Cenários A/B com QA ativo, reconstrução de trace com `TraceTest`/`TraceEndpointTest`, páginas web com `WebUiTest`/`TraceViewTest`/`WebE2ETest` — formulário válido/vazio, resultado HIGH com aprovação refletida, falha do agente, 404 amigável, escaping de HTML, eventos ordenados com documentos recuperados, Cenários A/B pelas páginas, cenários integrados de resiliência com `ResilienceTest`, métricas com `AnalysisMetricsTest`/`MetricsInstrumentationTest`, executor com `ResilienceExecutorTest`) e `./mvnw spotless:check`. Suíte inteira verde **sem chave de API**.
+- Python (em `agent/`): `pytest` e `ruff check .` — cobre o grafo nos cenários do roadmap (happy path, high risk, prompt injection com avaliação obtida da aplicação, endpoint de segurança indisponível, tool failure, validation failure, max iteration, repasse do bloco `qa` ao `final_result`), aplicação indisponível, paralelismo e propagação de trace_id, com client HTTP mockado.
 - E2E: `docker compose up --build` + `python scripts/smoke_test.py` — Cenário A (desconto VIP 10%→15%) e Cenário B adversário (fixture com a frase oficial de injeção → evento de segurança persistido, risco HIGH permanece PENDING, decisão humana via endpoint), com chave configurada ou fluxo degradado marcado (`analysis_unavailable`) sem chave; `trace_id` correlacionado nos logs dos dois serviços.
 - Demonstrações: `scripts/rag_demo.py` (RAG com fontes/scores), `scripts/mcp_tools_demo.py` (MCP tools/list + proteção de path), `scripts/fake_embeddings_server.py` (embeddings determinísticos locais só para demonstração), `scripts/generate_evidence.py` (gera as evidências 05/06 como placeholders até os screenshots reais da demonstração).
 - CI: `.github/workflows/ci.yml` (jobs `spring`, `agent` e `e2e`).

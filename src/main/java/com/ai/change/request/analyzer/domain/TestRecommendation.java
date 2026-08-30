@@ -35,8 +35,7 @@ public class TestRecommendation {
   @Column(length = 200)
   private String riskCategory;
 
-  @Column
-  private Boolean refined;
+  @Column private Boolean refined;
 
   protected TestRecommendation() {}
 

@@ -14,9 +14,8 @@ import org.springframework.stereotype.Service;
 
 /**
  * Revisao de codigo assistida (etapa QA): recupera {@code coding-guidelines} e {@code
- * business-rules} via RAG, monta a evidencia delimitada como DADO NAO CONFIÁVEL e executa o
- * estagio {@code CODE_REVIEW}. A revisao apenas produz findings/recomendacoes; nunca altera o
- * repositorio.
+ * business-rules} via RAG, monta a evidencia delimitada como DADO NAO CONFIÁVEL e executa o estagio
+ * {@code CODE_REVIEW}. A revisao apenas produz findings/recomendacoes; nunca altera o repositorio.
  */
 @Service
 public class QaCodeReviewService {
@@ -26,7 +25,9 @@ public class QaCodeReviewService {
   private final AiAnalysisService aiAnalysisService;
 
   public QaCodeReviewService(
-      RagService ragService, EvidenceRenderer evidenceRenderer, AiAnalysisService aiAnalysisService) {
+      RagService ragService,
+      EvidenceRenderer evidenceRenderer,
+      AiAnalysisService aiAnalysisService) {
     this.ragService = ragService;
     this.evidenceRenderer = evidenceRenderer;
     this.aiAnalysisService = aiAnalysisService;
@@ -62,7 +63,8 @@ public class QaCodeReviewService {
     if (diff != null && !diff.isBlank()) {
       diffSection.add(Map.of("diff", diff));
     }
-    String evidence = evidenceRenderer.renderSections(Map.of("DOCUMENTOS", documents, "DIFF", diffSection));
+    String evidence =
+        evidenceRenderer.renderSections(Map.of("DOCUMENTOS", documents, "DIFF", diffSection));
     CodeReviewResult result = aiAnalysisService.reviewCode(changeText, evidence);
     return new ReviewOutcome(
         result, List.copyOf(documents), search.degraded() || result.degraded());
