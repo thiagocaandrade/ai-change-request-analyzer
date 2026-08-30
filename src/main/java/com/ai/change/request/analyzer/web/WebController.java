@@ -148,7 +148,8 @@ public class WebController {
       return redirectSeeOther("/requests/" + id);
     }
     try {
-      changeRequestController.approve(id, new ApprovalRequest(approver.trim(), parsed), httpRequest);
+      changeRequestController.approve(
+          id, new ApprovalRequest(approver.trim(), parsed), httpRequest);
     } catch (ApprovalConflictException e) {
       attributes.addFlashAttribute(
           "error",
