@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="pt-BR" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Não encontrado</title>
+    <link rel="stylesheet" th:href="@{/css/app.css}">
+</head>
+<body>
+<header class="app-header">
+    <h1>AI Change Request Analyzer</h1>
+    <nav>
+        <a th:href="@{/}">Nova solicitação</a>
+    </nav>
+</header>
+<main class="app-main">
+    <section class="card">
+        <h2>Não encontrado</h2>
+        <p th:text="${message}"></p>
+        <p><a th:href="@{/}">Voltar ao formulário</a></p>
+    </section>
+</main>
+</body>
+</html>
