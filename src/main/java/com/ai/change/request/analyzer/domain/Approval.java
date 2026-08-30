@@ -30,6 +30,18 @@ public class Approval {
   @Column(nullable = false, length = 16)
   private ApprovalStatus status;
 
+  @Column(length = 64)
+  private String approver;
+
+  @Enumerated(EnumType.STRING)
+  @Column(length = 16)
+  private ApprovalDecision decision;
+
+  private Instant decidedAt;
+
+  @Column(length = 64)
+  private String traceId;
+
   @Column(nullable = false)
   private Instant createdAt;
 
@@ -39,6 +51,16 @@ public class Approval {
     this.changeRequest = changeRequest;
     this.required = required;
     this.status = status;
+  }
+
+  /** Registra a decisao humana; apenas PENDING pode transitar para APPROVED/REJECTED. */
+  public void decide(String approver, ApprovalDecision decision, String traceId) {
+    this.approver = approver;
+    this.decision = decision;
+    this.decidedAt = Instant.now();
+    this.traceId = traceId;
+    this.status =
+        decision == ApprovalDecision.APPROVED ? ApprovalStatus.APPROVED : ApprovalStatus.REJECTED;
   }
 
   @PrePersist
@@ -71,6 +93,22 @@ public class Approval {
 
   public void setStatus(ApprovalStatus status) {
     this.status = status;
+  }
+
+  public String getApprover() {
+    return approver;
+  }
+
+  public ApprovalDecision getDecision() {
+    return decision;
+  }
+
+  public Instant getDecidedAt() {
+    return decidedAt;
+  }
+
+  public String getTraceId() {
+    return traceId;
   }
 
   public Instant getCreatedAt() {
