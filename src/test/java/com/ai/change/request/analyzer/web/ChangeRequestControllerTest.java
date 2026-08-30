@@ -13,8 +13,11 @@ import com.ai.change.request.analyzer.domain.ApprovalStatus;
 import com.ai.change.request.analyzer.domain.ChangeRequest;
 import com.ai.change.request.analyzer.domain.ChangeRequestRepository;
 import com.ai.change.request.analyzer.domain.ChangeRequestStatus;
+import com.ai.change.request.analyzer.security.SecurityAssessmentService;
+import com.ai.change.request.analyzer.security.SecurityAssessmentService.SecurityEvent;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
@@ -36,6 +39,8 @@ class ChangeRequestControllerTest {
   @Autowired private ObjectMapper objectMapper;
 
   @Autowired private ChangeRequestRepository repository;
+
+  @Autowired private SecurityAssessmentService securityAssessmentService;
 
   @MockitoBean private AgentClient agentClient;
 
@@ -263,6 +268,36 @@ class ChangeRequestControllerTest {
     assertThat(body.get("approvalStatus").asText()).isEqualTo(ApprovalStatus.PENDING.name());
     assertThat(body.get("findings")).hasSize(1);
     assertThat(body.get("testRecommendations")).hasSize(1);
+    assertThat(body.get("securityAssessment").get("detected").asBoolean()).isFalse();
+    assertThat(body.get("securityAssessment").get("events").isEmpty()).isTrue();
+  }
+
+  @Test
+  void getAnalysisIncludesSecurityAssessmentWithEvents() throws Exception {
+    String id = createRequestId();
+    mockMvc
+        .perform(
+            post("/api/change-requests/" + id + "/analysis")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(HIGH_ANALYSIS))
+        .andExpect(r -> assertThat(r.getResponse().getStatus()).isEqualTo(200));
+
+    ChangeRequest request = repository.findById(UUID.fromString(id)).orElseThrow();
+    securityAssessmentService.persist(
+        request,
+        List.of(new SecurityEvent("prompt_injection", "code", "ignore as instruções", "IGNORED")));
+
+    var result = mockMvc.perform(get("/api/change-requests/" + id + "/analysis")).andReturn();
+
+    assertThat(result.getResponse().getStatus()).isEqualTo(200);
+    JsonNode body = objectMapper.readTree(result.getResponse().getContentAsString());
+    JsonNode assessment = body.get("securityAssessment");
+    assertThat(assessment.get("detected").asBoolean()).isTrue();
+    JsonNode event = assessment.get("events").get(0);
+    assertThat(event.get("type").asText()).isEqualTo("prompt_injection");
+    assertThat(event.get("source").asText()).isEqualTo("code");
+    assertThat(event.get("evidence").asText()).isEqualTo("ignore as instruções");
+    assertThat(event.get("action").asText()).isEqualTo("IGNORED");
   }
 
   @Test
@@ -296,6 +331,197 @@ class ChangeRequestControllerTest {
     JsonNode body = objectMapper.readTree(result.getResponse().getContentAsString());
     assertThat(body.get("analysis").get("riskLevel").asText()).isEqualTo("HIGH");
     assertThat(body.get("analysis").get("approvalRequired").asBoolean()).isTrue();
+  }
+
+  @Test
+  void approvalEndpointApprovesPendingHighRiskAnalysis() throws Exception {
+    String id = createRequestId();
+    mockMvc
+        .perform(
+            post("/api/change-requests/" + id + "/analysis")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(HIGH_ANALYSIS))
+        .andExpect(r -> assertThat(r.getResponse().getStatus()).isEqualTo(200));
+
+    var result =
+        mockMvc
+            .perform(
+                post("/api/change-requests/" + id + "/approval")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content("{\"approver\":\"revisora\",\"decision\":\"APPROVED\"}"))
+            .andReturn();
+
+    assertThat(result.getResponse().getStatus()).isEqualTo(200);
+    JsonNode body = objectMapper.readTree(result.getResponse().getContentAsString());
+    assertThat(body.get("approvalStatus").asText()).isEqualTo("APPROVED");
+    assertThat(body.get("approver").asText()).isEqualTo("revisora");
+    assertThat(body.get("decision").asText()).isEqualTo("APPROVED");
+    assertThat(body.get("decidedAt").asText()).isNotBlank();
+    assertThat(body.get("traceId").asText()).isNotBlank();
+
+    var get = mockMvc.perform(get("/api/change-requests/" + id)).andReturn();
+    JsonNode summary = objectMapper.readTree(get.getResponse().getContentAsString());
+    assertThat(summary.get("analysis").get("approvalStatus").asText()).isEqualTo("APPROVED");
+  }
+
+  @Test
+  void approvalEndpointRejectsWithRejectedDecision() throws Exception {
+    String id = createRequestId();
+    mockMvc
+        .perform(
+            post("/api/change-requests/" + id + "/analysis")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(HIGH_ANALYSIS))
+        .andExpect(r -> assertThat(r.getResponse().getStatus()).isEqualTo(200));
+
+    var result =
+        mockMvc
+            .perform(
+                post("/api/change-requests/" + id + "/approval")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content("{\"approver\":\"revisora\",\"decision\":\"REJECTED\"}"))
+            .andReturn();
+
+    assertThat(result.getResponse().getStatus()).isEqualTo(200);
+    JsonNode body = objectMapper.readTree(result.getResponse().getContentAsString());
+    assertThat(body.get("approvalStatus").asText()).isEqualTo("REJECTED");
+    assertThat(body.get("decision").asText()).isEqualTo("REJECTED");
+  }
+
+  @Test
+  void approvalEndpointRejectsSecondDecisionWithConflict() throws Exception {
+    String id = createRequestId();
+    mockMvc
+        .perform(
+            post("/api/change-requests/" + id + "/analysis")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(HIGH_ANALYSIS))
+        .andExpect(r -> assertThat(r.getResponse().getStatus()).isEqualTo(200));
+    mockMvc
+        .perform(
+            post("/api/change-requests/" + id + "/approval")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"approver\":\"revisora\",\"decision\":\"APPROVED\"}"))
+        .andExpect(r -> assertThat(r.getResponse().getStatus()).isEqualTo(200));
+
+    var second =
+        mockMvc
+            .perform(
+                post("/api/change-requests/" + id + "/approval")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content("{\"approver\":\"outra\",\"decision\":\"REJECTED\"}"))
+            .andReturn();
+
+    assertThat(second.getResponse().getStatus()).isEqualTo(409);
+    JsonNode body = objectMapper.readTree(second.getResponse().getContentAsString());
+    assertThat(body.get("error").asText()).isEqualTo("approval_conflict");
+  }
+
+  @Test
+  void approvalEndpointWithoutRequiredApprovalReturnsConflict() throws Exception {
+    String id = createRequestId();
+    mockMvc
+        .perform(
+            post("/api/change-requests/" + id + "/analysis")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(
+                    "{\"findings\":[],\"riskAssessment\":{\"level\":\"LOW\",\"confidence\":0.8},\"testRecommendations\":[]}"))
+        .andExpect(r -> assertThat(r.getResponse().getStatus()).isEqualTo(200));
+
+    var result =
+        mockMvc
+            .perform(
+                post("/api/change-requests/" + id + "/approval")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content("{\"approver\":\"revisora\",\"decision\":\"APPROVED\"}"))
+            .andReturn();
+
+    assertThat(result.getResponse().getStatus()).isEqualTo(409);
+    JsonNode body = objectMapper.readTree(result.getResponse().getContentAsString());
+    assertThat(body.get("error").asText()).isEqualTo("approval_conflict");
+  }
+
+  @Test
+  void approvalEndpointWithInvalidDecisionReturnsBadRequest() throws Exception {
+    String id = createRequestId();
+
+    var result =
+        mockMvc
+            .perform(
+                post("/api/change-requests/" + id + "/approval")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content("{\"approver\":\"revisora\",\"decision\":\"MAYBE\"}"))
+            .andReturn();
+
+    assertThat(result.getResponse().getStatus()).isEqualTo(400);
+    JsonNode body = objectMapper.readTree(result.getResponse().getContentAsString());
+    assertThat(body.get("error").asText()).isEqualTo("invalid_request");
+  }
+
+  @Test
+  void approvalEndpointWithBlankApproverReturnsBadRequest() throws Exception {
+    String id = createRequestId();
+
+    var result =
+        mockMvc
+            .perform(
+                post("/api/change-requests/" + id + "/approval")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content("{\"approver\":\"\",\"decision\":\"APPROVED\"}"))
+            .andReturn();
+
+    assertThat(result.getResponse().getStatus()).isEqualTo(400);
+    JsonNode body = objectMapper.readTree(result.getResponse().getContentAsString());
+    assertThat(body.get("error").asText()).isEqualTo("invalid_request");
+  }
+
+  @Test
+  void approvalEndpointWithUnknownRequestReturnsNotFound() throws Exception {
+    var result =
+        mockMvc
+            .perform(
+                post("/api/change-requests/" + UUID.randomUUID() + "/approval")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content("{\"approver\":\"revisora\",\"decision\":\"APPROVED\"}"))
+            .andReturn();
+
+    assertThat(result.getResponse().getStatus()).isEqualTo(404);
+    JsonNode body = objectMapper.readTree(result.getResponse().getContentAsString());
+    assertThat(body.get("error").asText()).isEqualTo("not_found");
+  }
+
+  @Test
+  void highRiskAnalysisStaysPendingUntilEndpointDecision() throws Exception {
+    String id = createRequestId();
+    mockMvc
+        .perform(
+            post("/api/change-requests/" + id + "/analysis")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(HIGH_ANALYSIS))
+        .andExpect(r -> assertThat(r.getResponse().getStatus()).isEqualTo(200));
+
+    var before = mockMvc.perform(get("/api/change-requests/" + id)).andReturn();
+    JsonNode pending =
+        objectMapper.readTree(before.getResponse().getContentAsString()).get("analysis");
+    assertThat(pending.get("approvalRequired").asBoolean()).isTrue();
+    assertThat(pending.get("approvalStatus").asText()).isEqualTo("PENDING");
+
+    mockMvc
+        .perform(
+            post("/api/change-requests/" + id + "/approval")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"approver\":\"revisora\",\"decision\":\"APPROVED\"}"))
+        .andExpect(r -> assertThat(r.getResponse().getStatus()).isEqualTo(200));
+
+    var after = mockMvc.perform(get("/api/change-requests/" + id)).andReturn();
+    JsonNode decided =
+        objectMapper.readTree(after.getResponse().getContentAsString()).get("analysis");
+    assertThat(decided.get("approvalStatus").asText()).isEqualTo("APPROVED");
+
+    ChangeRequest persisted = repository.findById(UUID.fromString(id)).orElseThrow();
+    assertThat(persisted.getApproval().getApprover()).isEqualTo("revisora");
+    assertThat(persisted.getApproval().getDecision())
+        .isEqualTo(com.ai.change.request.analyzer.domain.ApprovalDecision.APPROVED);
   }
 
   private String createRequestId() throws Exception {
