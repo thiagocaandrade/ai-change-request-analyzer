@@ -34,6 +34,7 @@ class QaServiceTest {
   private final QaCodeReviewService codeReviewService = mock(QaCodeReviewService.class);
   private final AiAnalysisService aiAnalysisService = mock(AiAnalysisService.class);
   private final EvidenceRenderer evidenceRenderer = new EvidenceRenderer(new ObjectMapper());
+  private final RiskMatrixService riskMatrixService = new RiskMatrixService();
   private final TraceEventRepository traceEventRepository = mock(TraceEventRepository.class);
   private final TraceService traceService = new TraceService(traceEventRepository);
   private final SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
@@ -44,6 +45,7 @@ class QaServiceTest {
           codeReviewService,
           aiAnalysisService,
           evidenceRenderer,
+          riskMatrixService,
           traceService,
           metrics,
           new ObjectMapper());
@@ -186,6 +188,8 @@ class QaServiceTest {
 
     assertThat(outcome.degraded()).isTrue();
     assertThat(outcome.recommendations()).isNotEmpty();
+    assertThat(outcome.recommendations().get(0).priorityJustification()).isNotBlank();
+    assertThat(outcome.recommendations().get(0).priority()).isIn("LOW", "MEDIUM", "HIGH");
     List<String> after = new ArrayList<>();
     try (var files = Files.walk(testDir)) {
       files.filter(Files::isRegularFile).forEach(file -> after.add(file.toString()));

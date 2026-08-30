@@ -60,7 +60,13 @@ public final class AgentGatewayDtos {
       Map<String, Object> classification,
       List<Map<String, Object>> impactFindings) {}
 
-  public record TestRecommendation(String component, String description, String priority) {}
+  public record TestRecommendation(
+      String component,
+      String description,
+      String priority,
+      String priorityJustification,
+      String riskCategory,
+      Boolean refined) {}
 
   public record GenerateTestPlanResponse(
       List<TestRecommendation> recommendations, boolean degraded) {}

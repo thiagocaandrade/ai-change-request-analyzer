@@ -43,6 +43,7 @@ public class QaService {
   private final QaCodeReviewService codeReviewService;
   private final AiAnalysisService aiAnalysisService;
   private final EvidenceRenderer evidenceRenderer;
+  private final RiskMatrixService riskMatrixService;
   private final TraceService traceService;
   private final AnalysisMetrics metrics;
   private final ObjectMapper objectMapper;
@@ -51,12 +52,14 @@ public class QaService {
       QaCodeReviewService codeReviewService,
       AiAnalysisService aiAnalysisService,
       EvidenceRenderer evidenceRenderer,
+      RiskMatrixService riskMatrixService,
       TraceService traceService,
       AnalysisMetrics metrics,
       ObjectMapper objectMapper) {
     this.codeReviewService = codeReviewService;
     this.aiAnalysisService = aiAnalysisService;
     this.evidenceRenderer = evidenceRenderer;
+    this.riskMatrixService = riskMatrixService;
     this.traceService = traceService;
     this.metrics = metrics;
     this.objectMapper = objectMapper;
@@ -75,6 +78,7 @@ public class QaService {
   public record QaOutcome(
       CodeReviewResult review,
       List<QaRecommendation> recommendations,
+      List<RiskMatrixService.RiskCategoryAssessment> matrix,
       List<Map<String, Object>> documents,
       int refinementIterations,
       boolean degraded,
@@ -150,6 +154,10 @@ public class QaService {
           countInvalid(items, knownComponents));
     }
 
+    List<RiskMatrixService.RiskCategoryAssessment> matrix =
+        riskMatrixService.evaluate(review.result().riskCategories(), changeText);
+    RiskMatrixService.RiskCategoryAssessment fallbackCategory = riskMatrixService.topPriority(matrix);
+
     List<QaRecommendation> recommendations = new ArrayList<>();
     for (TestRecommendationDto item : items) {
       boolean refined = !isInvalid(item, knownComponents);
@@ -164,27 +172,58 @@ public class QaService {
             null,
             null);
       }
-      recommendations.add(
-          new QaRecommendation(
-              item.component(),
-              item.description(),
-              item.priority(),
-              refined
-                  ? "recomendacao valida (componente consistente com os findings de QA)"
-                  : "recomendacao mantida nao refinada apos o limite de iteracoes",
-              null,
-              refined));
+      recommendations.add(toQaRecommendation(item, matrix, fallbackCategory, refined));
     }
 
     boolean degraded = review.degraded() || plan.degraded();
     return new QaOutcome(
         review.result(),
         List.copyOf(recommendations),
+        matrix,
         review.documents(),
         iterations,
         degraded,
         truncate(toJson(review.result())),
         truncate(toJson(items)));
+  }
+
+  /**
+   * Anexa prioridade derivada da matriz: a categoria e escolhida por palavras-chave
+   * deterministicas (ou a categoria aplicavel de maior prioridade); a prioridade final vem sempre
+   * da combinacao Impact x Likelihood calculada pela aplicacao.
+   */
+  private QaRecommendation toQaRecommendation(
+      TestRecommendationDto item,
+      List<RiskMatrixService.RiskCategoryAssessment> matrix,
+      RiskMatrixService.RiskCategoryAssessment fallbackCategory,
+      boolean refined) {
+    String text =
+        (item.component() == null ? "" : item.component()) + " " + (item.description() == null ? "" : item.description());
+    String category = riskMatrixService.categoryFor(text);
+    RiskMatrixService.RiskCategoryAssessment assessment = null;
+    if (category != null) {
+      assessment =
+          matrix.stream().filter(entry -> entry.category().equals(category)).findFirst().orElse(null);
+    }
+    if (assessment == null || !assessment.applicable()) {
+      assessment = fallbackCategory;
+    }
+    if (assessment != null && assessment.applicable()) {
+      return new QaRecommendation(
+          item.component(),
+          item.description(),
+          assessment.priority().name(),
+          assessment.justification(),
+          assessment.category(),
+          refined);
+    }
+    return new QaRecommendation(
+        item.component(),
+        item.description(),
+        riskMatrixService.normalizePriority(item.priority()).name(),
+        "sem categoria de risco aplicavel; prioridade derivada da sugestao do modelo normalizada pela aplicacao",
+        null,
+        refined);
   }
 
   private boolean hasInvalid(List<TestRecommendationDto> items, Set<String> knownComponents) {

@@ -273,7 +273,7 @@ public class AgentGatewayController {
   }
 
   private TestRecommendation toRecommendation(TestRecommendationDto dto) {
-    return new TestRecommendation(dto.component(), dto.description(), dto.priority());
+    return new TestRecommendation(dto.component(), dto.description(), dto.priority(), null, null, null);
   }
 
   @SuppressWarnings("unchecked")

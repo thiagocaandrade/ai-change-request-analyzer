@@ -73,7 +73,10 @@ public class AnalysisService {
             new TestRecommendation(
                 recommendation.component(),
                 recommendation.description(),
-                recommendation.priority()));
+                recommendation.priority(),
+                recommendation.priorityJustification(),
+                recommendation.riskCategory(),
+                recommendation.refined()));
       }
 
       persistAnalysis(request, analysis, decision);

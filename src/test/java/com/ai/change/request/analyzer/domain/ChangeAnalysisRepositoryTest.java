@@ -69,4 +69,52 @@ class ChangeAnalysisRepositoryTest {
     assertThat(loaded.getAnalysis().getRiskAssessment()).isNull();
     assertThat(loaded.getApproval().isRequired()).isFalse();
   }
+
+  @Test
+  void persistsRecommendationWithPriorityJustificationRiskCategoryAndRefinedFlag() {
+    ChangeRequest request = new ChangeRequest();
+    request.setText("Alterar o desconto de clientes VIP de 10% para 15%.");
+    request.setStatus(ChangeRequestStatus.COMPLETED);
+    request.setTraceId("trace-recommendation-fields");
+
+    ChangeAnalysis analysis = new ChangeAnalysis();
+    analysis.setChangeRequest(request);
+    analysis.addRecommendation(
+        new TestRecommendation(
+            "discount-service",
+            "Cobrir desconto VIP de 15%",
+            "HIGH",
+            "categoria financial_business_rule_regression: impacto=HIGH, probabilidade=MEDIUM -> HIGH (matriz deterministica)",
+            "financial_business_rule_regression",
+            true));
+    analysis.addRecommendation(
+        new TestRecommendation(
+            "unit",
+            "teste unitario (degradado: analysis_unavailable)",
+            "MEDIUM",
+            "recomendacao mantida nao refinada apos o limite de iteracoes",
+            null,
+            false));
+    request.setAnalysis(analysis);
+
+    changeRequestRepository.save(request);
+
+    ChangeRequest loaded = changeRequestRepository.findById(request.getId()).orElseThrow();
+    assertThat(loaded.getAnalysis().getRecommendations()).hasSize(2);
+    TestRecommendation prioritized =
+        loaded.getAnalysis().getRecommendations().stream()
+            .filter(recommendation -> "discount-service".equals(recommendation.getComponent()))
+            .findFirst()
+            .orElseThrow();
+    assertThat(prioritized.getPriorityJustification()).contains("matriz deterministica");
+    assertThat(prioritized.getRiskCategory())
+        .isEqualTo("financial_business_rule_regression");
+    assertThat(prioritized.getRefined()).isTrue();
+    TestRecommendation unrefined =
+        loaded.getAnalysis().getRecommendations().stream()
+            .filter(recommendation -> "unit".equals(recommendation.getComponent()))
+            .findFirst()
+            .orElseThrow();
+    assertThat(unrefined.getRefined()).isFalse();
+  }
 }

@@ -167,7 +167,12 @@ public class ChangeRequestController {
             .map(
                 r ->
                     new CreateAnalysisRequest.RecommendationDto(
-                        r.getComponent(), r.getDescription(), r.getPriority()))
+                        r.getComponent(),
+                        r.getDescription(),
+                        r.getPriority(),
+                        r.getPriorityJustification(),
+                        r.getRiskCategory(),
+                        r.getRefined()))
             .toList(),
         approval != null ? approval.isRequired() : null,
         approval != null ? approval.getStatus() : null,

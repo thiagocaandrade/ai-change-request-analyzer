@@ -76,7 +76,12 @@ class AnalysisServiceTest {
         new CreateAnalysisRequest.RiskDto(level, confidence, "regra financeira"),
         List.of(
             new CreateAnalysisRequest.RecommendationDto(
-                "discount-service", "Cobrir desconto VIP de 15%", "HIGH")));
+                "discount-service",
+                "Cobrir desconto VIP de 15%",
+                "HIGH",
+                "categoria financial_business_rule_regression: impacto=HIGH, probabilidade=MEDIUM -> HIGH (matriz deterministica)",
+                "financial_business_rule_regression",
+                true)));
   }
 
   @Test

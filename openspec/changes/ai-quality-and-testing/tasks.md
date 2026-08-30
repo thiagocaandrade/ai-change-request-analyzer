@@ -15,9 +15,9 @@
 
 ## 3. Teste baseado em risco com matriz Impact × Likelihood
 
-- [ ] 3.1 Implementar `qa/RiskMatrixService` determinístico: combinação fixa Impact (LOW/MEDIUM/HIGH) × Likelihood (LOW/MEDIUM/HIGH) → prioridade; sugestões do modelo fora de faixa normalizadas; a prioridade final nunca vem diretamente da sugestão; verificar teste unitário da tabela completa de combinações e da normalização
-- [ ] 3.2 Avaliar as 4 categorias obrigatórias em toda análise (prompt injection, acesso não autorizado às tools, classificação incorreta de HIGH/LOW, regressão de regra de negócio financeira) e anexar impacto/probabilidade/prioridade calculada às recomendações; verificar teste de que cada categoria aplicável recebe prioridade derivada da matriz
-- [ ] 3.3 Adicionar `priorityJustification` e `riskCategory` a `TestRecommendation` (entidade + DTOs de entrada/saída) e garantir que toda análise entrega pelo menos um teste priorizado com justificativa (fallback determinístico quando QA degradada); verificar teste de persistência e de fallback degradado com justificativa presente
+- [x] 3.1 Implementar `qa/RiskMatrixService` determinístico: combinação fixa Impact (LOW/MEDIUM/HIGH) × Likelihood (LOW/MEDIUM/HIGH) → prioridade; sugestões do modelo fora de faixa normalizadas; a prioridade final nunca vem diretamente da sugestão; verificar teste unitário da tabela completa de combinações e da normalização
+- [x] 3.2 Avaliar as 4 categorias obrigatórias em toda análise (prompt injection, acesso não autorizado às tools, classificação incorreta de HIGH/LOW, regressão de regra de negócio financeira) e anexar impacto/probabilidade/prioridade calculada às recomendações; verificar teste de que cada categoria aplicável recebe prioridade derivada da matriz
+- [x] 3.3 Adicionar `priorityJustification` e `riskCategory` a `TestRecommendation` (entidade + DTOs de entrada/saída) e garantir que toda análise entrega pelo menos um teste priorizado com justificativa (fallback determinístico quando QA degradada); verificar teste de persistência e de fallback degradado com justificativa presente
 
 ## 4. Integração no pipeline de análise, persistência e endpoints
 

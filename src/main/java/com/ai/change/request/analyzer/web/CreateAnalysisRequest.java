@@ -23,5 +23,8 @@ public record CreateAnalysisRequest(
   public record RecommendationDto(
       @NotBlank @Size(max = 200) String component,
       @NotBlank @Size(max = 4000) String description,
-      @Size(max = 16) String priority) {}
+      @Size(max = 16) String priority,
+      @Size(max = 4000) String priorityJustification,
+      @Size(max = 200) String riskCategory,
+      Boolean refined) {}
 }
