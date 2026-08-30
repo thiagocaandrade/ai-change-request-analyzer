@@ -10,7 +10,7 @@ public final class AgentGatewayDtos {
 
   private AgentGatewayDtos() {}
 
-  public record TextRequest(@NotBlank @Size(max = 4000) String changeText) {}
+  public record TextRequest(@NotBlank @Size(max = 4000) String changeText, String requestId) {}
 
   public record ClassifyResponse(String category, String notes, boolean degraded) {}
 
@@ -27,6 +27,14 @@ public final class AgentGatewayDtos {
   public record HistoryHit(String requestId, String summary) {}
 
   public record RetrieveHistoryResponse(List<HistoryHit> findings, boolean degraded) {}
+
+  public record SecurityAssessmentRequest(
+      @NotBlank @Size(max = 4000) String changeText, String requestId) {}
+
+  public record SecurityEventDto(String type, String source, String evidence, String action) {}
+
+  /** Avaliacao de seguranca tipada: indicador de deteccao e lista de eventos. */
+  public record SecurityAssessmentDto(boolean detected, List<SecurityEventDto> events) {}
 
   public record EvidenceRequest(
       @NotBlank @Size(max = 4000) String changeText,
