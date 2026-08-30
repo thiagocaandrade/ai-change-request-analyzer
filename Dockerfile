@@ -11,5 +11,9 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY --from=build /build/target/*.jar app.jar
+COPY knowledge /repo/knowledge
+COPY src /repo/src
+COPY scripts /repo/scripts
+COPY agent /repo/agent
 EXPOSE 8080
 ENTRYPOINT ["java", "-jar", "app.jar"]

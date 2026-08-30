@@ -31,7 +31,7 @@ O grafo DEVE executar os nós na ordem: `validate_request`, `classify_request`, 
 
 ### Requirement: Coleta paralela de evidências
 
-Os nós `analyze_code`, `retrieve_knowledge` e `retrieve_history` DEVE executar em paralelo após `detect_untrusted_content`, e a síntese DEVE aguardar a conclusão dos três antes de iniciar `analyze_impact`.
+Os nós `analyze_code`, `retrieve_knowledge` e `retrieve_history` DEVE executar em paralelo após `detect_untrusted_content`, obtendo as evidências da aplicação via HTTP com timeout e retry limitado, e a síntese DEVE aguardar a conclusão dos três antes de iniciar `analyze_impact`.
 
 #### Scenario: Execução paralela
 
@@ -40,8 +40,13 @@ Os nós `analyze_code`, `retrieve_knowledge` e `retrieve_history` DEVE executar 
 
 #### Scenario: Falha isolada em coleta
 
-- **WHEN** um dos três nós de coleta falha
+- **WHEN** um dos três nós de coleta falha, inclusive por falha de comunicação com a aplicação
 - **THEN** os demais concluem, a falha é registrada em `errors` com o nó identificado e a análise segue degradada
+
+#### Scenario: Aplicação indisponível
+
+- **WHEN** a aplicação não responde dentro do timeout após os retries de um nó de coleta
+- **THEN** o nó registra a falha em `errors` com coleta vazia e a análise segue degradada, sem interromper o grafo
 
 ### Requirement: Branching por risco
 
