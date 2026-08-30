@@ -7,7 +7,7 @@ on:
 
 jobs:
   spring:
-    name: Spring Boot (lint, test, build)
+    name: Spring Boot (compile, unit, integration, quality, docker)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -18,14 +18,38 @@ jobs:
           java-version: "21"
           cache: maven
 
-      - name: Spotless check
-        run: ./mvnw --batch-mode spotless:check
+      - name: Compile
+        run: |
+          set -o pipefail
+          ./mvnw --batch-mode compile 2>&1 | tee build.log
 
-      - name: Test
+      - name: Unit tests (surefire)
         run: ./mvnw --batch-mode test
 
-      - name: Package
-        run: ./mvnw --batch-mode package -DskipTests
+      - name: Integration tests (mvn verify with Failsafe)
+        run: |
+          set -o pipefail
+          ./mvnw --batch-mode verify 2>&1 | tee test.log
+
+      - name: Quality checks (spotless)
+        run: ./mvnw --batch-mode spotless:check
+
+      - name: Docker image
+        run: docker build -t analyzer:ci .
+
+      - name: Redact sensitive patterns from logs
+        if: always()
+        run: python3 scripts/redact_logs.py build.log test.log
+
+      - name: Upload build and test logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pipeline-logs
+          path: |
+            build.log
+            test.log
+          if-no-files-found: warn
 
   agent:
     name: Agent Python (ruff, pytest)
