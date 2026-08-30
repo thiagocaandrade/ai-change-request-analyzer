@@ -7,12 +7,18 @@ import com.ai.change.request.analyzer.ai.dto.AiResults.ImpactAnalysisResult;
 import com.ai.change.request.analyzer.ai.dto.AiResults.RiskAnalysisResult;
 import com.ai.change.request.analyzer.ai.dto.AiResults.SecurityAnalysisResult;
 import com.ai.change.request.analyzer.ai.dto.AiResults.TestPlanResult;
+import com.ai.change.request.analyzer.observability.AnalysisMetrics;
+import com.ai.change.request.analyzer.observability.TraceEventRepository;
+import com.ai.change.request.analyzer.observability.TraceService;
+import com.ai.change.request.analyzer.resilience.ResilienceExecutor;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import jakarta.validation.Validation;
 import jakarta.validation.Validator;
 import java.util.ArrayDeque;
 import java.util.List;
 import java.util.Queue;
 import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.model.ChatModel;
@@ -33,11 +39,26 @@ class AiAnalysisServiceTest {
       "{\"level\":\"ALTO\",\"confidence\":1.5,\"rationale\":\"\"}";
 
   private final Validator validator = Validation.buildDefaultValidatorFactory().getValidator();
+  private final SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
 
-  private AiAnalysisService serviceWith(FakeChatModel model) {
+  private AiAnalysisService serviceWith(ChatModel model) {
+    return serviceWith(model, 5000);
+  }
+
+  private AiAnalysisService serviceWith(ChatModel model, long timeoutMs) {
     ObjectProvider<ChatClient> provider =
         providerOf(model == null ? null : ChatClient.builder(model).build());
-    return new AiAnalysisService(new PromptRegistry(), validator, provider, 5000);
+    TraceService traceService = new TraceService(Mockito.mock(TraceEventRepository.class));
+    ResilienceExecutor executor = new ResilienceExecutor(traceService, 0, 10);
+    return new AiAnalysisService(
+        new PromptRegistry(),
+        validator,
+        provider,
+        timeoutMs,
+        executor,
+        new AnalysisMetrics(meterRegistry),
+        traceService,
+        "");
   }
 
   @Test
@@ -192,6 +213,29 @@ class AiAnalysisServiceTest {
     assertThat(classification.category()).isEqualTo("business_rule");
   }
 
+  @Test
+  void modelTimeoutFallsBackDegradedAfterRetries() {
+    AiAnalysisService service = serviceWith(new SlowChatModel(VALID_CLASSIFICATION, 400), 100);
+
+    ClassificationResult result = service.classify("Alterar desconto VIP");
+
+    assertThat(result.degraded()).isTrue();
+    assertThat(result.category()).isEqualTo("general");
+    assertThat(result.notes()).isEqualTo("analysis_unavailable");
+  }
+
+  @Test
+  void llmCallsAndValidationFailuresAreCounted() {
+    AiAnalysisService service =
+        serviceWith(new FakeChatModel(INVALID_CLASSIFICATION, NOT_JSON, INVALID_CLASSIFICATION));
+
+    service.classify("Alterar desconto VIP");
+
+    assertThat(meterRegistry.get(AnalysisMetrics.LLM_CALLS).counter().count()).isEqualTo(3.0);
+    assertThat(meterRegistry.get(AnalysisMetrics.VALIDATION_FAILURES).counter().count())
+        .isBetween(1.0, 3.0);
+  }
+
   static class FakeChatModel implements ChatModel {
 
     private final Queue<String> responses;
@@ -203,6 +247,28 @@ class AiAnalysisServiceTest {
     @Override
     public ChatResponse call(Prompt prompt) {
       String content = responses.size() > 1 ? responses.poll() : responses.peek();
+      return new ChatResponse(List.of(new Generation(new AssistantMessage(content))));
+    }
+  }
+
+  static class SlowChatModel implements ChatModel {
+
+    private final String content;
+    private final long delayMs;
+
+    SlowChatModel(String content, long delayMs) {
+      this.content = content;
+      this.delayMs = delayMs;
+    }
+
+    @Override
+    public ChatResponse call(Prompt prompt) {
+      try {
+        Thread.sleep(delayMs);
+      } catch (InterruptedException e) {
+        Thread.currentThread().interrupt();
+        throw new IllegalStateException("interrompido", e);
+      }
       return new ChatResponse(List.of(new Generation(new AssistantMessage(content))));
     }
   }

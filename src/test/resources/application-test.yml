@@ -10,3 +10,11 @@ spring:
 
 agent:
   url: http://localhost:8000
+
+ai:
+  chat:
+    api-key: ""
+
+resilience:
+  backoff-ms: 1
+  max-backoff-ms: 10

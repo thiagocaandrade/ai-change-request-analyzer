@@ -28,15 +28,25 @@ public class TraceIdFilter extends OncePerRequestFilter {
     if (traceId == null || traceId.isBlank()) {
       traceId = UUID.randomUUID().toString();
     }
+    String requestId = UUID.randomUUID().toString();
     request.setAttribute(TRACE_ID_ATTRIBUTE, traceId);
     MDC.put("trace_id", traceId);
+    MDC.put("request_id", requestId);
     response.setHeader(TRACE_ID_HEADER, traceId);
-    log.info("request_started method={} path={}", request.getMethod(), request.getRequestURI());
+    long start = System.nanoTime();
+    log.info(
+        "http_request_started node=http event=request_started method={} path={}",
+        request.getMethod(),
+        request.getRequestURI());
     try {
       chain.doFilter(request, response);
     } finally {
-      log.info("request_finished status={}", response.getStatus());
+      log.info(
+          "http_request_finished node=http event=request_finished status={} duration_ms={}",
+          response.getStatus(),
+          (System.nanoTime() - start) / 1_000_000);
       MDC.remove("trace_id");
+      MDC.remove("request_id");
     }
   }
 }

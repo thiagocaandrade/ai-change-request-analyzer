@@ -6,11 +6,12 @@ import com.ai.change.request.analyzer.ai.dto.AiResults.RiskAnalysisResult;
 import com.ai.change.request.analyzer.ai.dto.AiResults.SecurityAnalysisResult;
 import com.ai.change.request.analyzer.ai.dto.AiResults.TestPlanResult;
 import com.ai.change.request.analyzer.ai.dto.AiResults.TestRecommendationDto;
+import com.ai.change.request.analyzer.observability.AnalysisMetrics;
+import com.ai.change.request.analyzer.observability.TraceService;
+import com.ai.change.request.analyzer.resilience.ResilienceExecutor;
 import jakarta.validation.Validator;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -22,7 +23,8 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 /**
- * Executa as etapas cognitivas via modelo de IA com structured output validado e retry limitado.
+ * Executa as etapas cognitivas via modelo de IA com structured output validado e retry limitado com
+ * backoff (via {@link ResilienceExecutor}).
  *
  * <p>Sem modelo configurado, toda etapa retorna fallback deterministico marcado ({@code
  * degraded=true}); saida invalida nunca e retornada nem persistida.
@@ -32,23 +34,32 @@ public class AiAnalysisService {
 
   private static final Logger log = LoggerFactory.getLogger(AiAnalysisService.class);
 
-  /** 1 tentativa inicial + 2 retries. */
-  static final int MAX_ATTEMPTS = 3;
-
   private final PromptRegistry promptRegistry;
   private final Validator validator;
   private final ObjectProvider<ChatClient> chatClientProvider;
   private final long chatTimeoutMs;
+  private final ResilienceExecutor resilienceExecutor;
+  private final AnalysisMetrics metrics;
+  private final TraceService traceService;
+  private final String modelName;
 
   public AiAnalysisService(
       PromptRegistry promptRegistry,
       Validator validator,
       ObjectProvider<ChatClient> chatClientProvider,
-      @Value("${ai.chat.timeout-ms:30000}") long chatTimeoutMs) {
+      @Value("${ai.chat.timeout-ms:30000}") long chatTimeoutMs,
+      ResilienceExecutor resilienceExecutor,
+      AnalysisMetrics metrics,
+      TraceService traceService,
+      @Value("${ai.chat.model:}") String modelName) {
     this.promptRegistry = promptRegistry;
     this.validator = validator;
     this.chatClientProvider = chatClientProvider;
     this.chatTimeoutMs = chatTimeoutMs;
+    this.resilienceExecutor = resilienceExecutor;
+    this.metrics = metrics;
+    this.traceService = traceService;
+    this.modelName = modelName;
   }
 
   public ClassificationResult classify(String changeText) {
@@ -138,9 +149,11 @@ public class AiAnalysisService {
       Class<T> outputType,
       Supplier<T> fallback) {
     String traceId = MDC.get("trace_id");
+    String model = modelName == null || modelName.isBlank() ? "unconfigured" : modelName;
     ChatClient chatClient = chatClientProvider.getIfAvailable();
     if (chatClient == null) {
-      log.warn("ai_unavailable stage={} trace_id={}", stage.id(), traceId);
+      traceService.record(stage.id(), "ai_unavailable", null, "degraded", null, null, null, model);
+      log.warn("ai_unavailable stage={} model={} trace_id={}", stage.id(), model, traceId);
       return fallback.get();
     }
 
@@ -154,35 +167,29 @@ public class AiAnalysisService {
                 "evidence", evidence == null ? "" : evidence,
                 "format", converter.getFormat()));
 
-    for (int attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-      try {
-        String content = callWithTimeout(chatClient, system, user);
-        T result = converter.convert(content);
-        validate(result);
-        if (attempt > 1) {
-          log.info("llm_recovered stage={} attempt={} trace_id={}", stage.id(), attempt, traceId);
-        }
-        return result;
-      } catch (Exception e) {
-        log.warn(
-            "invalid_llm_output stage={} attempt={} error={} detail={} trace_id={}",
-            stage.id(),
-            attempt,
-            e.getClass().getSimpleName(),
-            String.valueOf(e.getMessage()),
-            traceId);
-      }
-    }
-    log.error("llm_generation_exhausted stage={} trace_id={}", stage.id(), traceId);
-    return fallback.get();
-  }
-
-  private String callWithTimeout(ChatClient chatClient, String system, String user)
-      throws Exception {
-    CompletableFuture<String> future =
-        CompletableFuture.supplyAsync(
-            () -> chatClient.prompt().system(system).user(user).call().content());
-    return future.get(chatTimeoutMs, TimeUnit.MILLISECONDS);
+    return resilienceExecutor.execute(
+        stage.id(),
+        "llm_call",
+        () -> {
+          metrics.llmCall();
+          try {
+            String content = chatClient.prompt().system(system).user(user).call().content();
+            T result = converter.convert(content);
+            validate(result);
+            return result;
+          } catch (IllegalArgumentException e) {
+            metrics.validationFailure();
+            throw e;
+          } catch (RuntimeException e) {
+            throw e;
+          } catch (Exception e) {
+            throw new IllegalStateException("falha na chamada ao modelo", e);
+          }
+        },
+        chatTimeoutMs,
+        fallback,
+        null,
+        model);
   }
 
   private <T> void validate(T result) {

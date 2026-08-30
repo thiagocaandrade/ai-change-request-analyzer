@@ -1,5 +1,7 @@
 package com.ai.change.request.analyzer.rag;
 
+import com.ai.change.request.analyzer.observability.TraceService;
+import com.ai.change.request.analyzer.resilience.ResilienceExecutor;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
@@ -15,8 +17,9 @@ import org.springframework.stereotype.Service;
 
 /**
  * Busca semantica nos documentos de conhecimento: top-k configurável, threshold de score, metadata
- * (source, document_id, chunk_id, score) e ordenacao decrescente. Falha ou base indisponivel →
- * lista vazia marcada (degradada), sem erro fatal.
+ * (source, document_id, chunk_id, score) e ordenacao decrescente. Execucao com timeout, retry
+ * limitado e backoff (via {@link ResilienceExecutor}); falha ou base indisponivel → lista vazia
+ * marcada (degradada), sem erro fatal.
  */
 @Service
 public class RagService {
@@ -31,14 +34,23 @@ public class RagService {
   private final ObjectProvider<VectorStore> vectorStoreProvider;
   private final int defaultTopK;
   private final double defaultThreshold;
+  private final ResilienceExecutor resilienceExecutor;
+  private final TraceService traceService;
+  private final long timeoutMs;
 
   public RagService(
       ObjectProvider<VectorStore> vectorStoreProvider,
       @Value("${ai.rag.top-k:4}") int defaultTopK,
-      @Value("${ai.rag.similarity-threshold:0.7}") double defaultThreshold) {
+      @Value("${ai.rag.similarity-threshold:0.7}") double defaultThreshold,
+      ResilienceExecutor resilienceExecutor,
+      TraceService traceService,
+      @Value("${ai.rag.timeout-ms:5000}") long timeoutMs) {
     this.vectorStoreProvider = vectorStoreProvider;
     this.defaultTopK = defaultTopK;
     this.defaultThreshold = defaultThreshold;
+    this.resilienceExecutor = resilienceExecutor;
+    this.traceService = traceService;
+    this.timeoutMs = timeoutMs;
   }
 
   public KnowledgeSearchResult search(String query) {
@@ -49,26 +61,44 @@ public class RagService {
     String traceId = MDC.get("trace_id");
     VectorStore store = vectorStoreProvider.getIfAvailable();
     if (store == null) {
+      traceService.record(
+          "retrieve_knowledge",
+          "rag_unavailable",
+          null,
+          "degraded",
+          "no_vector_store",
+          null,
+          null,
+          null);
       log.warn("rag_unavailable reason=no_vector_store trace_id={}", traceId);
       return new KnowledgeSearchResult(List.of(), true);
     }
-    try {
-      SearchRequest request =
-          SearchRequest.builder().query(query).topK(topK).similarityThreshold(threshold).build();
-      List<Document> documents = store.similaritySearch(request);
-      List<KnowledgeHit> hits =
-          documents.stream()
-              .map(this::toHit)
-              .sorted(
-                  Comparator.comparingDouble(
-                          (KnowledgeHit hit) -> hit.score() == null ? -1.0 : hit.score())
-                      .reversed())
-              .toList();
-      return new KnowledgeSearchResult(hits, false);
-    } catch (Exception e) {
-      log.error("rag_search_failed error={} trace_id={}", e.getClass().getSimpleName(), traceId);
-      return new KnowledgeSearchResult(List.of(), true);
-    }
+    return resilienceExecutor.execute(
+        "retrieve_knowledge",
+        "rag_search",
+        () -> {
+          SearchRequest request =
+              SearchRequest.builder()
+                  .query(query)
+                  .topK(topK)
+                  .similarityThreshold(threshold)
+                  .build();
+          List<Document> documents = store.similaritySearch(request);
+          List<KnowledgeHit> hits =
+              documents.stream()
+                  .map(this::toHit)
+                  .sorted(
+                      Comparator.comparingDouble(
+                              (KnowledgeHit hit) -> hit.score() == null ? -1.0 : hit.score())
+                          .reversed())
+                  .toList();
+          return new KnowledgeSearchResult(hits, false);
+        },
+        timeoutMs,
+        () -> {
+          log.error("rag_search_degraded reason=retries_exhausted trace_id={}", traceId);
+          return new KnowledgeSearchResult(List.of(), true);
+        });
   }
 
   private KnowledgeHit toHit(Document document) {

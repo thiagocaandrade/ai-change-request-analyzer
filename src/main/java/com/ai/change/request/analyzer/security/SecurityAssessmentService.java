@@ -2,6 +2,7 @@ package com.ai.change.request.analyzer.security;
 
 import com.ai.change.request.analyzer.ai.dto.AiResults.SecurityFindingDto;
 import com.ai.change.request.analyzer.domain.ChangeRequest;
+import com.ai.change.request.analyzer.observability.AnalysisMetrics;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -58,9 +59,12 @@ public class SecurityAssessmentService {
   public record SecurityEvent(String type, String source, String evidence, String action) {}
 
   private final SecurityAssessmentRepository repository;
+  private final AnalysisMetrics metrics;
 
-  public SecurityAssessmentService(SecurityAssessmentRepository repository) {
+  public SecurityAssessmentService(
+      SecurityAssessmentRepository repository, AnalysisMetrics metrics) {
     this.repository = repository;
+    this.metrics = metrics;
   }
 
   /** Varredura deterministica de um conteudo unico, sem sugestao de LLM. */
@@ -125,6 +129,9 @@ public class SecurityAssessmentService {
                 event.action(),
                 traceId,
                 Instant.now()));
+        if (TYPE_PROMPT_INJECTION.equals(event.type())) {
+          metrics.promptInjection();
+        }
       }
       if (!toSave.isEmpty()) {
         repository.saveAll(toSave);

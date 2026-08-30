@@ -1,10 +1,16 @@
 package com.ai.change.request.analyzer.tools;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
 
 import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
+import com.ai.change.request.analyzer.observability.AnalysisMetrics;
+import com.ai.change.request.analyzer.observability.TraceEventRepository;
+import com.ai.change.request.analyzer.observability.TraceService;
+import com.ai.change.request.analyzer.resilience.ResilienceExecutor;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -16,9 +22,16 @@ import org.springframework.ai.tool.definition.ToolDefinition;
 
 class ResilientToolCallbackTest {
 
+  private SimpleMeterRegistry meterRegistry;
+  private AnalysisMetrics metrics;
+  private ResilienceExecutor executor;
+
   @BeforeEach
-  void clearMdc() {
-    MDC.clear();
+  void setUp() {
+    meterRegistry = new SimpleMeterRegistry();
+    metrics = new AnalysisMetrics(meterRegistry);
+    TraceService traceService = new TraceService(mock(TraceEventRepository.class));
+    executor = new ResilienceExecutor(traceService, 0, 10);
   }
 
   @AfterEach
@@ -36,12 +49,14 @@ class ResilientToolCallbackTest {
               calls.incrementAndGet();
               throw new IllegalStateException("boom");
             });
-    ResilientToolCallback callback = new ResilientToolCallback(failing, 2000);
+    ResilientToolCallback callback = new ResilientToolCallback(failing, 2000, executor, metrics);
 
     String result = callback.call("{\"query\":\"x\"}");
 
     assertThat(calls.get()).isEqualTo(3);
     assertThat(result).contains("tool_failed_after_retries").contains("search_code");
+    assertThat(meterRegistry.get(AnalysisMetrics.TOOL_CALLS).counter().count()).isEqualTo(3.0);
+    assertThat(meterRegistry.get(AnalysisMetrics.TOOL_ERRORS).counter().count()).isEqualTo(3.0);
   }
 
   @Test
@@ -56,12 +71,13 @@ class ResilientToolCallbackTest {
               }
               return "{\"path\":\"ok\"}";
             });
-    ResilientToolCallback callback = new ResilientToolCallback(flaky, 2000);
+    ResilientToolCallback callback = new ResilientToolCallback(flaky, 2000, executor, metrics);
 
     String result = callback.call("{\"path\":\"x\"}");
 
     assertThat(calls.get()).isEqualTo(2);
     assertThat(result).contains("ok");
+    assertThat(meterRegistry.get(AnalysisMetrics.TOOL_ERRORS).counter().count()).isEqualTo(1.0);
   }
 
   @Test
@@ -77,7 +93,7 @@ class ResilientToolCallbackTest {
               }
               return "{\"results\":[]}";
             });
-    ResilientToolCallback callback = new ResilientToolCallback(slow, 50);
+    ResilientToolCallback callback = new ResilientToolCallback(slow, 50, executor, metrics);
 
     String result = callback.call("{\"query\":\"x\"}");
 
@@ -86,7 +102,7 @@ class ResilientToolCallbackTest {
 
   @Test
   void failureLogCarriesTraceId() {
-    Logger logger = (Logger) LoggerFactory.getLogger(ResilientToolCallback.class);
+    Logger logger = (Logger) LoggerFactory.getLogger(ResilienceExecutor.class);
     ListAppender<ILoggingEvent> appender = new ListAppender<>();
     appender.start();
     logger.addAppender(appender);
@@ -98,7 +114,7 @@ class ResilientToolCallbackTest {
               input -> {
                 throw new IllegalStateException("boom");
               });
-      new ResilientToolCallback(failing, 2000).call("{\"path\":\"x\"}");
+      new ResilientToolCallback(failing, 2000, executor, metrics).call("{\"path\":\"x\"}");
     } finally {
       logger.detachAppender(appender);
       MDC.clear();
@@ -107,7 +123,7 @@ class ResilientToolCallbackTest {
     assertThat(appender.list)
         .anyMatch(
             event ->
-                event.getMessage().contains("tool_failed_after_retries")
+                event.getMessage().contains("resilience_fallback")
                     && "trace-tools-1".equals(event.getMDCPropertyMap().get("trace_id")));
   }
 

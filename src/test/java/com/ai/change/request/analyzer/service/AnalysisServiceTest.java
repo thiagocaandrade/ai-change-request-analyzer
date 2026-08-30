@@ -11,30 +11,54 @@ import com.ai.change.request.analyzer.domain.ChangeRequestStatus;
 import com.ai.change.request.analyzer.domain.InvalidConfidenceException;
 import com.ai.change.request.analyzer.domain.RiskLevel;
 import com.ai.change.request.analyzer.domain.RiskPolicy;
+import com.ai.change.request.analyzer.observability.AnalysisMetrics;
+import com.ai.change.request.analyzer.observability.TraceService;
 import com.ai.change.request.analyzer.security.SecurityAssessment;
 import com.ai.change.request.analyzer.security.SecurityAssessmentRepository;
 import com.ai.change.request.analyzer.security.SecurityAssessmentService;
 import com.ai.change.request.analyzer.security.SecurityAssessmentService.SecurityEvent;
 import com.ai.change.request.analyzer.web.CreateAnalysisRequest;
 import com.ai.change.request.analyzer.web.GlobalExceptionHandler.ChangeRequestNotFoundException;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.test.context.ActiveProfiles;
 
 @DataJpaTest
-@Import({AnalysisService.class, RiskPolicy.class, SecurityAssessmentService.class})
+@Import({
+  AnalysisService.class,
+  RiskPolicy.class,
+  SecurityAssessmentService.class,
+  AnalysisMetrics.class,
+  TraceService.class,
+  AnalysisServiceTest.MetricsConfig.class
+})
 @ActiveProfiles("test")
 class AnalysisServiceTest {
+
+  @TestConfiguration
+  static class MetricsConfig {
+
+    @Bean
+    MeterRegistry meterRegistry() {
+      return new SimpleMeterRegistry();
+    }
+  }
 
   @Autowired private AnalysisService service;
 
   @Autowired private ChangeRequestRepository repository;
 
   @Autowired private SecurityAssessmentRepository securityAssessmentRepository;
+
+  @Autowired private MeterRegistry meterRegistry;
 
   private ChangeRequest createRequest() {
     ChangeRequest request = new ChangeRequest();
@@ -144,5 +168,30 @@ class AnalysisServiceTest {
     assertThat(events.get(0).getSource()).isEqualTo("code");
     assertThat(events.get(0).getAction()).isEqualTo("IGNORED");
     assertThat(events.get(0).getTraceId()).isEqualTo(request.getTraceId());
+  }
+
+  @Test
+  void completedHighRiskAnalysisIncrementsMetrics() {
+    ChangeRequest request = createRequest();
+    double highRiskBefore = meterRegistry.get(AnalysisMetrics.HIGH_RISK_CHANGES).counter().count();
+    long durationBefore = meterRegistry.get(AnalysisMetrics.ANALYSIS_DURATION).timer().count();
+
+    service.registerAnalysis(request.getId(), payload(RiskLevel.HIGH, 0.95));
+
+    assertThat(meterRegistry.get(AnalysisMetrics.HIGH_RISK_CHANGES).counter().count())
+        .isEqualTo(highRiskBefore + 1.0);
+    assertThat(meterRegistry.get(AnalysisMetrics.ANALYSIS_DURATION).timer().count())
+        .isEqualTo(durationBefore + 1);
+  }
+
+  @Test
+  void lowRiskAnalysisDoesNotIncrementHighRiskMetric() {
+    ChangeRequest request = createRequest();
+    double highRiskBefore = meterRegistry.get(AnalysisMetrics.HIGH_RISK_CHANGES).counter().count();
+
+    service.registerAnalysis(request.getId(), payload(RiskLevel.LOW, 0.8));
+
+    assertThat(meterRegistry.get(AnalysisMetrics.HIGH_RISK_CHANGES).counter().count())
+        .isEqualTo(highRiskBefore);
   }
 }
