@@ -11,7 +11,7 @@ Plano consolidado das fases originais (chat) em **10 changes OpenSpec**, na orde
 | 03 | `langgraph-orchestration` | Grafo completo com 13 nós, paralelização, branching e condição de parada | FASE 6 | **concluída** (arquivada 2026-08-29) |
 | 04 | `ai-rag-memory-tools` | Spring AI (prompts versionados, structured output, retry), 4 tools (1 via MCP), RAG pgvector, memória persistente | FASE 7, 8, 9, 10, 11 | **concluída** (arquivada 2026-08-30) |
 | 05 | `security-and-human-approval` | Prompt injection, `SecurityAssessment`, endpoint de approval PENDING/APPROVED/REJECTED | FASE 12, 13 | **concluída** (arquivada 2026-08-30) |
-| 06 | `observability-and-resilience` | Logs JSON + métricas + correlação por trace_id; timeout/retry/backoff/fallback em LLM, MCP, RAG e tools | FASE 14, 15 | **concluída** (implementada 2026-08-30) |
+| 06 | `observability-and-resilience` | Logs JSON + métricas + correlação por trace_id; timeout/retry/backoff/fallback em LLM, MCP, RAG e tools | FASE 14, 15 | **concluída** (arquivada 2026-08-30) |
 | 07 | `frontend` | 1 tela Thymeleaf + página de trace (etapas, duração, tools, documentos recuperados) | FASE 16 | pendente |
 | 08 | `ai-quality-and-testing` | AI code review, geração/refinamento de testes, teste baseado em risco com matriz Impact × Likelihood | FASE 17, 18 | pendente |
 | 09 | `devops-and-n8n` | CI/CD completo, análise de logs com IA, detecção de anomalia + tendência de falha, workflow n8n exportável | FASE 19, 20, 21, 22 | pendente |
