@@ -11,6 +11,10 @@ import com.ai.change.request.analyzer.domain.ChangeRequestStatus;
 import com.ai.change.request.analyzer.domain.InvalidConfidenceException;
 import com.ai.change.request.analyzer.domain.RiskLevel;
 import com.ai.change.request.analyzer.domain.RiskPolicy;
+import com.ai.change.request.analyzer.security.SecurityAssessment;
+import com.ai.change.request.analyzer.security.SecurityAssessmentRepository;
+import com.ai.change.request.analyzer.security.SecurityAssessmentService;
+import com.ai.change.request.analyzer.security.SecurityAssessmentService.SecurityEvent;
 import com.ai.change.request.analyzer.web.CreateAnalysisRequest;
 import com.ai.change.request.analyzer.web.GlobalExceptionHandler.ChangeRequestNotFoundException;
 import java.util.List;
@@ -22,13 +26,15 @@ import org.springframework.context.annotation.Import;
 import org.springframework.test.context.ActiveProfiles;
 
 @DataJpaTest
-@Import({AnalysisService.class, RiskPolicy.class})
+@Import({AnalysisService.class, RiskPolicy.class, SecurityAssessmentService.class})
 @ActiveProfiles("test")
 class AnalysisServiceTest {
 
   @Autowired private AnalysisService service;
 
   @Autowired private ChangeRequestRepository repository;
+
+  @Autowired private SecurityAssessmentRepository securityAssessmentRepository;
 
   private ChangeRequest createRequest() {
     ChangeRequest request = new ChangeRequest();
@@ -119,5 +125,24 @@ class AnalysisServiceTest {
     assertThat(loaded.getAnalysis()).isNotNull();
     assertThat(loaded.getApproval().isRequired()).isFalse();
     assertThat(loaded.getApproval().getStatus()).isEqualTo(ApprovalStatus.PENDING);
+  }
+
+  @Test
+  void persistAnalysisPersistsSecurityEventsLinkedToRequest() {
+    ChangeRequest request = createRequest();
+    ChangeAnalysis analysis = new ChangeAnalysis();
+    analysis.setChangeRequest(request);
+
+    service.persistAnalysis(
+        request,
+        analysis,
+        List.of(new SecurityEvent("prompt_injection", "code", "ignore as instruções", "IGNORED")));
+
+    List<SecurityAssessment> events =
+        securityAssessmentRepository.findByChangeRequestId(request.getId());
+    assertThat(events).hasSize(1);
+    assertThat(events.get(0).getSource()).isEqualTo("code");
+    assertThat(events.get(0).getAction()).isEqualTo("IGNORED");
+    assertThat(events.get(0).getTraceId()).isEqualTo(request.getTraceId());
   }
 }

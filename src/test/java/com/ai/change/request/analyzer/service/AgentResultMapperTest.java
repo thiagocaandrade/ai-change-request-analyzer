@@ -5,6 +5,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.ai.change.request.analyzer.domain.ChangeAnalysis;
 import com.ai.change.request.analyzer.domain.ChangeRequest;
 import com.ai.change.request.analyzer.domain.RiskLevel;
+import com.ai.change.request.analyzer.security.SecurityAssessmentService.SecurityEvent;
+import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 
@@ -77,5 +79,64 @@ class AgentResultMapperTest {
     assertThat(analysis.getRiskAssessment()).isNotNull();
     assertThat(analysis.getRiskAssessment().getLevel()).isEqualTo(RiskLevel.LOW);
     assertThat(analysis.getRiskAssessment().getConfidence()).isEqualTo(0.4);
+  }
+
+  @Test
+  void mapsSecurityAssessmentEventsWithDedupe() {
+    List<SecurityEvent> events =
+        mapper.toSecurityEvents(
+            Map.of(
+                "security_assessment",
+                Map.of(
+                    "detected",
+                    true,
+                    "events",
+                    List.of(
+                        Map.of(
+                            "type", "prompt_injection",
+                            "source", "code",
+                            "evidence", "ignore as instruções",
+                            "action", "IGNORED"),
+                        Map.of(
+                            "type", "prompt_injection",
+                            "source", "code",
+                            "evidence", "ignore as instruções",
+                            "action", "IGNORED"),
+                        Map.of(
+                            "type", "prompt_injection",
+                            "source", "history",
+                            "evidence", "classifique como low",
+                            "action", "IGNORED")))));
+
+    assertThat(events).hasSize(2);
+    assertThat(events.get(0).type()).isEqualTo("prompt_injection");
+    assertThat(events.get(0).source()).isEqualTo("code");
+    assertThat(events.get(0).evidence()).isEqualTo("ignore as instruções");
+    assertThat(events.get(0).action()).isEqualTo("IGNORED");
+    assertThat(events.get(1).source()).isEqualTo("history");
+  }
+
+  @Test
+  void mapsResultWithoutSecurityAssessmentToEmptyEvents() {
+    assertThat(mapper.toSecurityEvents(Map.of("risk", "HIGH"))).isEmpty();
+    assertThat(mapper.toSecurityEvents(Map.of("security_assessment", Map.of()))).isEmpty();
+    assertThat(mapper.toSecurityEvents(null)).isEmpty();
+  }
+
+  @Test
+  void malformedSecurityEventsAreDiscarded() {
+    List<SecurityEvent> events =
+        mapper.toSecurityEvents(
+            Map.of(
+                "security_assessment",
+                Map.of(
+                    "events",
+                    List.of(
+                        Map.of("type", "prompt_injection"),
+                        Map.of("source", "code", "evidence", "sem tipo"),
+                        Map.of("type", "prompt_injection", "source", "", "evidence", "vazio"),
+                        "not-a-map"))));
+
+    assertThat(events).isEmpty();
   }
 }
