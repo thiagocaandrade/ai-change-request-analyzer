@@ -48,4 +48,20 @@ public final class AiResults {
 
   public record SecurityAnalysisResult(
       @NotNull List<@Valid SecurityFindingDto> findings, Boolean degraded) {}
+
+  public record CodeReviewFindingDto(
+      @NotBlank @Size(max = 200) String component,
+      @NotBlank @Size(max = 4000) String description,
+      @Size(max = 16) String severity,
+      @Size(max = 200) String source) {}
+
+  public record RiskCategorySuggestionDto(
+      @NotBlank @Size(max = 64) String category,
+      @Size(max = 16) String impact,
+      @Size(max = 16) String likelihood) {}
+
+  public record CodeReviewResult(
+      @NotNull @Size(max = 8) List<@Valid CodeReviewFindingDto> findings,
+      @NotNull List<@Valid RiskCategorySuggestionDto> riskCategories,
+      Boolean degraded) {}
 }
