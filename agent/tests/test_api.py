@@ -1,11 +1,15 @@
+from fake_client import FakeAgentClient, happy_client
 from fastapi.testclient import TestClient
 
 import app.main as main_module
 from app.main import app
-from graph import nodes
 from graph.builder import build_graph
 
 client = TestClient(app)
+
+
+def patch_graph(monkeypatch, graph_client):
+    monkeypatch.setattr(main_module, "graph", build_graph(graph_client))
 
 
 def test_health_returns_200():
@@ -14,7 +18,8 @@ def test_health_returns_200():
     assert response.json()["status"] == "ok"
 
 
-def test_analyze_happy_path():
+def test_analyze_happy_path(monkeypatch):
+    patch_graph(monkeypatch, happy_client())
     response = client.post(
         "/analyze", json={"request_id": "req-1", "text": "Alterar desconto VIP de 10% para 15%"}
     )
@@ -27,22 +32,25 @@ def test_analyze_happy_path():
     assert result["risk"] == "MEDIUM"
     assert result["confidence"] == 0.5
     assert result["rationale"]
+    assert result["classification"]["category"] == "business_rule"
     assert result["test_plan"]
     assert result["approval"] == {"required": False, "status": None}
     assert "errors" not in result
 
 
 def test_analyze_high_risk_pending_approval(monkeypatch):
-    def seeded_high(state):
-        existing = state.get("risk_assessment") or {}
-        if existing.get("level") or existing.get("confidence") is not None:
-            return {}
-        return {
-            "risk_assessment": {"level": "HIGH", "confidence": 0.9, "rationale": "seed"}
+    high = FakeAgentClient(
+        **{
+            **happy_client().responses,
+            "assess_risk": {
+                "level": "HIGH",
+                "confidence": 0.9,
+                "rationale": "regra financeira",
+                "degraded": False,
+            },
         }
-
-    monkeypatch.setattr(nodes, "assess_risk", seeded_high)
-    monkeypatch.setattr(main_module, "graph", build_graph())
+    )
+    patch_graph(monkeypatch, high)
     response = client.post(
         "/analyze", json={"request_id": "req-1", "text": "Alterar desconto VIP"}
     )
@@ -54,16 +62,18 @@ def test_analyze_high_risk_pending_approval(monkeypatch):
 
 
 def test_analyze_failed_after_retries(monkeypatch):
-    def seeded_invalid(state):
-        existing = state.get("risk_assessment") or {}
-        if existing.get("level") or existing.get("confidence") is not None:
-            return {}
-        return {
-            "risk_assessment": {"level": "MEDIUM", "confidence": 1.5, "rationale": "seed"}
+    invalid = FakeAgentClient(
+        **{
+            **happy_client().responses,
+            "assess_risk": {
+                "level": "MEDIUM",
+                "confidence": 1.5,
+                "rationale": "invalida",
+                "degraded": False,
+            },
         }
-
-    monkeypatch.setattr(nodes, "assess_risk", seeded_invalid)
-    monkeypatch.setattr(main_module, "graph", build_graph())
+    )
+    patch_graph(monkeypatch, invalid)
     response = client.post(
         "/analyze", json={"request_id": "req-2", "text": "Alterar frete"}
     )
