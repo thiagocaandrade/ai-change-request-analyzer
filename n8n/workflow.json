@@ -1,0 +1,108 @@
+{
+  "name": "AI Change Request Analyzer - analise via webhook",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "change-request",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "webhook-change-request",
+      "name": "Webhook - Solicitação de mudança",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 0],
+      "webhookId": "analyzer-change-request"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:8080/api/change-requests",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { text: $json.body.text } }}",
+        "options": {}
+      },
+      "id": "http-analyze",
+      "name": "HTTP Request - Analisar mudança",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [220, 0]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "risk-high-condition",
+              "leftValue": "={{ $json.analysis.riskLevel }}",
+              "rightValue": "HIGH",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "if-risk-high",
+      "name": "IF - risco HIGH?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [440, 0]
+    },
+    {
+      "parameters": {},
+      "id": "notify-high",
+      "name": "Notificar (risco HIGH)",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [660, -80]
+    }
+  ],
+  "connections": {
+    "Webhook - Solicitação de mudança": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request - Analisar mudança",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request - Analisar mudança": {
+      "main": [
+        [
+          {
+            "node": "IF - risco HIGH?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF - risco HIGH?": {
+      "main": [
+        [
+          {
+            "node": "Notificar (risco HIGH)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    }
+  },
+  "settings": {},
+  "pinData": {}
+}

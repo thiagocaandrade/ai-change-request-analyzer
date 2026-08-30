@@ -21,8 +21,8 @@
 
 ## 4. Workflow n8n exportável
 
-- [ ] 4.1 Criar `n8n/workflow.json` exportável (Webhook → HTTP Request `POST /api/change-requests/analyze` → IF risk == HIGH → notificação) e `n8n/README.md` documentando trigger, endpoint, payload, resposta, condição, saída e evidência; verificar teste estrutural: JSON válido, nós e arestas presentes, condição referenciando o campo risk do resultado
-- [ ] 4.2 Garantir que o workflow contém apenas integração/roteamento (sem lógica de negócio) e que o payload documentado casa com o contrato existente de `ChangeRequestController`; verificar teste que inspeciona os tipos de nós do workflow e MockMvc do endpoint consumido
+- [x] 4.1 Criar `n8n/workflow.json` exportável (Webhook → HTTP Request `POST /api/change-requests/analyze` → IF risk == HIGH → notificação) e `n8n/README.md` documentando trigger, endpoint, payload, resposta, condição, saída e evidência; verificar teste estrutural: JSON válido, nós e arestas presentes, condição referenciando o campo risk do resultado
+- [x] 4.2 Garantir que o workflow contém apenas integração/roteamento (sem lógica de negócio) e que o payload documentado casa com o contrato existente de `ChangeRequestController`; verificar teste que inspeciona os tipos de nós do workflow e MockMvc do endpoint consumido
 
 ## 5. Testes E2E e evidências
 
