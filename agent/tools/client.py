@@ -72,18 +72,30 @@ class AgentClient:
     def classify(self, text: str, trace_id: str | None) -> dict:
         return self._post("/api/agent/classify", {"changeText": text}, trace_id)
 
-    def analyze_code(self, text: str, trace_id: str | None) -> dict:
-        return self._post("/api/agent/analyze-code", {"changeText": text}, trace_id)
+    def analyze_code(self, text: str, trace_id: str | None, request_id: str | None = None) -> dict:
+        payload: dict = {"changeText": text}
+        if request_id:
+            payload["requestId"] = request_id
+        return self._post("/api/agent/analyze-code", payload, trace_id)
 
-    def retrieve_knowledge(self, text: str, trace_id: str | None) -> dict:
-        return self._post(
-            "/api/agent/retrieve-knowledge", {"changeText": text}, trace_id
-        )
+    def retrieve_knowledge(
+        self, text: str, trace_id: str | None, request_id: str | None = None
+    ) -> dict:
+        payload: dict = {"changeText": text}
+        if request_id:
+            payload["requestId"] = request_id
+        return self._post("/api/agent/retrieve-knowledge", payload, trace_id)
 
-    def retrieve_history(self, text: str, trace_id: str | None) -> dict:
-        return self._post(
-            "/api/agent/retrieve-history", {"changeText": text}, trace_id
-        )
+    def retrieve_history(
+        self, text: str, trace_id: str | None, request_id: str | None = None
+    ) -> dict:
+        payload: dict = {"changeText": text}
+        if request_id:
+            payload["requestId"] = request_id
+        return self._post("/api/agent/retrieve-history", payload, trace_id)
+
+    def security_assessment(self, payload: dict, trace_id: str | None) -> dict:
+        return self._post("/api/agent/security-assessment", payload, trace_id)
 
     def analyze_impact(self, payload: dict, trace_id: str | None) -> dict:
         return self._post("/api/agent/analyze-impact", payload, trace_id)
