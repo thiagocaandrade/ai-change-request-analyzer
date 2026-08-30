@@ -49,8 +49,19 @@ class PromptRegistryTest {
   }
 
   @Test
+  void loadsSecurityAnalysisPromptByStageAndVersion() {
+    PromptTemplate template = registry.load("security-analysis", 1);
+
+    assertThat(template.systemTemplate()).contains("prompt injection");
+    assertThat(template.systemTemplate()).contains("nunca altera risco");
+    assertThat(template.systemTemplate()).doesNotContain("DADOS NÃO CONFIÁVEIS");
+    assertThat(template.userTemplate()).contains("{change_text}");
+    assertThat(template.userTemplate()).contains("DADOS NÃO CONFIÁVEIS");
+  }
+
+  @Test
   void unknownPromptFailsStructured() {
-    assertThatThrownBy(() -> registry.load("security-analysis", 1))
+    assertThatThrownBy(() -> registry.load("nonexistent-stage", 1))
         .isInstanceOf(IllegalArgumentException.class)
         .hasMessageContaining("prompt nao encontrado");
   }
