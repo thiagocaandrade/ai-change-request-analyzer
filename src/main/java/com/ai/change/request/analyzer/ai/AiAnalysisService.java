@@ -3,6 +3,7 @@ package com.ai.change.request.analyzer.ai;
 import com.ai.change.request.analyzer.ai.dto.AiResults.ClassificationResult;
 import com.ai.change.request.analyzer.ai.dto.AiResults.CodeReviewResult;
 import com.ai.change.request.analyzer.ai.dto.AiResults.ImpactAnalysisResult;
+import com.ai.change.request.analyzer.ai.dto.AiResults.LogAnalysisResult;
 import com.ai.change.request.analyzer.ai.dto.AiResults.RiskAnalysisResult;
 import com.ai.change.request.analyzer.ai.dto.AiResults.SecurityAnalysisResult;
 import com.ai.change.request.analyzer.ai.dto.AiResults.TestPlanResult;
@@ -133,6 +134,29 @@ public class AiAnalysisService {
             () -> new CodeReviewResult(List.of(), List.of(), true)));
   }
 
+  /**
+   * Analise de logs de pipeline assistida (etapa DevOps): o conteudo do log e apenas dado nao
+   * confiavel; a saida e recomendacao estruturada para revisao humana e nenhuma alteracao de
+   * pipeline e aplicada. Sem modelo configurado, retorna fallback deterministico marcado.
+   */
+  public LogAnalysisResult analyzeLogs(String logContent) {
+    return normalizeLogAnalysis(
+        generate(
+            AnalysisStage.LOG_ANALYSIS,
+            logContent,
+            "",
+            LogAnalysisResult.class,
+            () ->
+                new LogAnalysisResult(
+                    "Analise de logs degradada: modelo de IA nao configurado.",
+                    "unknown",
+                    "analysis_unavailable",
+                    "",
+                    "Revisao humana do log (degradado: analysis_unavailable).",
+                    0.0,
+                    true)));
+  }
+
   private static ClassificationResult normalizeClassification(ClassificationResult result) {
     return new ClassificationResult(
         result.category(), result.notes(), Boolean.TRUE.equals(result.degraded()));
@@ -162,6 +186,17 @@ public class AiAnalysisService {
     return new CodeReviewResult(
         result.findings() == null ? List.of() : result.findings(),
         result.riskCategories() == null ? List.of() : result.riskCategories(),
+        Boolean.TRUE.equals(result.degraded()));
+  }
+
+  private static LogAnalysisResult normalizeLogAnalysis(LogAnalysisResult result) {
+    return new LogAnalysisResult(
+        result.summary(),
+        result.failedStep(),
+        result.probableCause(),
+        result.evidence() == null ? "" : result.evidence(),
+        result.recommendedAction(),
+        result.confidence(),
         Boolean.TRUE.equals(result.degraded()));
   }
 
