@@ -18,6 +18,8 @@ services:
   agent:
     build:
       context: ./agent
+    environment:
+      APP_URL: ${APP_URL:-http://app:8080}
     ports:
       - "${AGENT_PORT:-8000}:8000"
     healthcheck:
@@ -37,6 +39,14 @@ services:
       AI_CHAT_MODEL: ${AI_CHAT_MODEL:-}
       AI_CHAT_API_KEY: ${AI_CHAT_API_KEY:-}
       AI_CHAT_BASE_URL: ${AI_CHAT_BASE_URL:-}
+      AI_EMBEDDING_MODEL: ${AI_EMBEDDING_MODEL:-}
+      AI_EMBEDDING_API_KEY: ${AI_EMBEDDING_API_KEY:-}
+      AI_EMBEDDING_BASE_URL: ${AI_EMBEDDING_BASE_URL:-}
+      AI_RAG_ENABLED: ${AI_RAG_ENABLED:-true}
+      AI_RAG_TOP_K: ${AI_RAG_TOP_K:-4}
+      AI_RAG_SIMILARITY_THRESHOLD: ${AI_RAG_SIMILARITY_THRESHOLD:-0.7}
+      AI_RAG_KNOWLEDGE_PATH: ${AI_RAG_KNOWLEDGE_PATH:-/repo/knowledge}
+      TOOLS_REPO_ROOT: ${TOOLS_REPO_ROOT:-/repo}
     ports:
       - "${APP_PORT:-8080}:8080"
     depends_on:

@@ -9,6 +9,7 @@ spring:
       - org.springframework.ai.model.openai.autoconfigure.OpenAiAudioSpeechAutoConfiguration
       - org.springframework.ai.model.openai.autoconfigure.OpenAiAudioTranscriptionAutoConfiguration
       - org.springframework.ai.model.openai.autoconfigure.OpenAiModerationAutoConfiguration
+      - org.springframework.ai.vectorstore.pgvector.autoconfigure.PgVectorStoreAutoConfiguration
   datasource:
     url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/analyzer}
     username: ${SPRING_DATASOURCE_USERNAME:analyzer}
@@ -16,9 +17,37 @@ spring:
   jpa:
     hibernate:
       ddl-auto: update
+  ai:
+    mcp:
+      server:
+        name: analyzer-mcp-server
+        version: "1.0.0"
+        protocol: STREAMABLE
 
 agent:
   url: ${AGENT_URL:http://localhost:8000}
+  timeout-ms: 120000
+
+ai:
+  chat:
+    api-key: ${AI_CHAT_API_KEY:}
+    model: ${AI_CHAT_MODEL:}
+    base-url: ${AI_CHAT_BASE_URL:}
+    timeout-ms: ${AI_CHAT_TIMEOUT_MS:30000}
+  embedding:
+    api-key: ${AI_EMBEDDING_API_KEY:}
+    model: ${AI_EMBEDDING_MODEL:}
+    base-url: ${AI_EMBEDDING_BASE_URL:}
+  rag:
+    enabled: ${AI_RAG_ENABLED:true}
+    top-k: ${AI_RAG_TOP_K:4}
+    similarity-threshold: ${AI_RAG_SIMILARITY_THRESHOLD:0.7}
+    knowledge-path: ${AI_RAG_KNOWLEDGE_PATH:knowledge}
+
+tools:
+  repo-root: ${TOOLS_REPO_ROOT:}
+  timeout-ms: ${TOOLS_TIMEOUT_MS:5000}
+  max-file-size: 102400
 
 management:
   endpoints:
