@@ -13,7 +13,7 @@ Plano consolidado das fases originais (chat) em **10 changes OpenSpec**, na orde
 | 05 | `security-and-human-approval` | Prompt injection, `SecurityAssessment`, endpoint de approval PENDING/APPROVED/REJECTED | FASE 12, 13 | **concluída** (arquivada 2026-08-30) |
 | 06 | `observability-and-resilience` | Logs JSON + métricas + correlação por trace_id; timeout/retry/backoff/fallback em LLM, MCP, RAG e tools | FASE 14, 15 | **concluída** (arquivada 2026-08-30) |
 | 07 | `frontend` | 1 tela Thymeleaf + página de trace (etapas, duração, tools, documentos recuperados) | FASE 16 | **concluída** (arquivada 2026-08-30) |
-| 08 | `ai-quality-and-testing` | AI code review, geração/refinamento de testes, teste baseado em risco com matriz Impact × Likelihood | FASE 17, 18 | pendente |
+| 08 | `ai-quality-and-testing` | AI code review, geração/refinamento de testes, teste baseado em risco com matriz Impact × Likelihood | FASE 17, 18 | **concluída** (arquivada 2026-08-30) |
 | 09 | `devops-and-n8n` | CI/CD completo, análise de logs com IA, detecção de anomalia + tendência de falha, workflow n8n exportável | FASE 19, 20, 21, 22 | pendente |
 | 10 | `final-hardening` | Refinamento de prompts v1→v2 com evidência, configuração de modelo por env, auditoria final (`/opsx:verify`), matriz README, `docs/evidence/` | FASE 23, 24, 25 | pendente |
 
