@@ -100,6 +100,17 @@ def test_graph_prompt_injection_detected_and_ignored():
     client = FakeAgentClient(
         **{
             **happy_client().responses,
+            "security_assessment": {
+                "detected": True,
+                "events": [
+                    {
+                        "type": "prompt_injection",
+                        "source": "change_request_text",
+                        "evidence": "ignore as instruções",
+                        "action": "IGNORED",
+                    }
+                ],
+            },
             "retrieve_knowledge": {"documents": [injected], "degraded": False},
             "assess_risk": {
                 "level": "HIGH",
@@ -113,9 +124,21 @@ def test_graph_prompt_injection_detected_and_ignored():
     assessment = state["security_assessment"]
     assert assessment["detected"] is True
     assert assessment["events"][0]["type"] == "prompt_injection"
+    assert state["final_result"]["security_assessment"]["detected"] is True
     assert state["final_result"]["risk"] == "HIGH"
     assert state["approval_required"] is True
     assert state["status"] == "pending_approval"
+
+
+def test_graph_security_assessment_unavailable_degrades_without_stopping():
+    error = AgentUnavailableError("aplicacao indisponivel em security-assessment")
+    client = FakeAgentClient(**{**happy_client().responses, "security_assessment": error})
+    state = run_graph(client=client)
+    assert state["status"] == "completed"
+    assert state["security_assessment"] == {"detected": False, "events": []}
+    assert any(e.get("node") == "detect_untrusted_content" for e in state["errors"])
+    assert state["final_result"]["risk"] == "MEDIUM"
+    assert state["final_result"]["test_plan"]
 
 
 def test_graph_tool_failure_degrades_analysis():
@@ -188,19 +211,19 @@ def test_graph_empty_text_fails_structured():
 def test_graph_collection_nodes_run_in_parallel():
     events = []
 
-    def slow_analyze(text, trace_id=None):
+    def slow_analyze(text, trace_id=None, request_id=None):
         events.append(("analyze_code", "start", time.monotonic()))
         time.sleep(0.1)
         events.append(("analyze_code", "end", time.monotonic()))
         return {"findings": [], "degraded": False}
 
-    def slow_knowledge(text, trace_id=None):
+    def slow_knowledge(text, trace_id=None, request_id=None):
         events.append(("retrieve_knowledge", "start", time.monotonic()))
         time.sleep(0.1)
         events.append(("retrieve_knowledge", "end", time.monotonic()))
         return {"documents": [], "degraded": False}
 
-    def slow_history(text, trace_id=None):
+    def slow_history(text, trace_id=None, request_id=None):
         events.append(("retrieve_history", "start", time.monotonic()))
         time.sleep(0.1)
         events.append(("retrieve_history", "end", time.monotonic()))

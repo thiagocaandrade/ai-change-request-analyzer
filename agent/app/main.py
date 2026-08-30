@@ -64,6 +64,7 @@ def to_response(state):
         "rationale": final_result.get("rationale"),
         "findings": final_result.get("findings"),
         "test_plan": final_result.get("test_plan"),
+        "security_assessment": final_result.get("security_assessment"),
         "approval": final_result.get("approval"),
     }
     errors = state.get("errors") or []
