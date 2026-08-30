@@ -13,7 +13,6 @@ import com.ai.change.request.analyzer.domain.ApprovalStatus;
 import com.ai.change.request.analyzer.domain.ChangeRequest;
 import com.ai.change.request.analyzer.domain.ChangeRequestRepository;
 import com.ai.change.request.analyzer.domain.ChangeRequestStatus;
-import com.ai.change.request.analyzer.domain.RiskLevel;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.Map;

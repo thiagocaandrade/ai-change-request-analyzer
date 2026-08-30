@@ -54,9 +54,7 @@ public class AnalysisService {
     for (CreateAnalysisRequest.RecommendationDto recommendation : payload.testRecommendations()) {
       analysis.addRecommendation(
           new TestRecommendation(
-              recommendation.component(),
-              recommendation.description(),
-              recommendation.priority()));
+              recommendation.component(), recommendation.description(), recommendation.priority()));
     }
 
     persistAnalysis(request, analysis, decision);
@@ -64,8 +62,7 @@ public class AnalysisService {
   }
 
   @Transactional
-  public ChangeAnalysis persistAnalysis(
-      ChangeRequest request, ChangeAnalysis analysis) {
+  public ChangeAnalysis persistAnalysis(ChangeRequest request, ChangeAnalysis analysis) {
     RiskAssessment riskAssessment = analysis.getRiskAssessment();
     RiskPolicy.RiskDecision decision =
         riskAssessment != null
