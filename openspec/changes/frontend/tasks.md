@@ -19,9 +19,9 @@
 
 ## 4. Estilo CSS e navegação entre as telas
 
-- [ ] 4.1 Criar `static/css/app.css` (layout simples e responsivo: cabeçalho, cartões de risco por nível, tabela de eventos, badges de status) e aplicar nos três templates; verificar `GET` das três páginas retorna HTML com link para o CSS
-- [ ] 4.2 Navegação consistente: formulário → resultado → trace (link por trace_id) e retorno ao formulário; badges de risco diferenciados por nível (LOW/MEDIUM/HIGH); verificar navegação via MockMvc e inspeção manual das páginas renderizadas
-- [ ] 4.3 Auditoria de escaping: garantir que nenhum dado não confiável usa `th:utext`; solicitação/finding/evidência com HTML/script renderizam literalmente; verificar teste MockMvc com payload contendo `<script>` e `mvn test` verde
+- [x] 4.1 Criar `static/css/app.css` (layout simples e responsivo: cabeçalho, cartões de risco por nível, tabela de eventos, badges de status) e aplicar nos três templates; verificar `GET` das três páginas retorna HTML com link para o CSS
+- [x] 4.2 Navegação consistente: formulário → resultado → trace (link por trace_id) e retorno ao formulário; badges de risco diferenciados por nível (LOW/MEDIUM/HIGH); verificar navegação via MockMvc e inspeção manual das páginas renderizadas
+- [x] 4.3 Auditoria de escaping: garantir que nenhum dado não confiável usa `th:utext`; solicitação/finding/evidência com HTML/script renderizam literalmente; verificar teste MockMvc com payload contendo `<script>` e `mvn test` verde
 
 ## 5. Testes das telas (MockMvc/E2E) + evidência
 
