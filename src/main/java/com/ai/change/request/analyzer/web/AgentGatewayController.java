@@ -6,10 +6,14 @@ import com.ai.change.request.analyzer.ai.dto.AiResults.ClassificationResult;
 import com.ai.change.request.analyzer.ai.dto.AiResults.ImpactAnalysisResult;
 import com.ai.change.request.analyzer.ai.dto.AiResults.ImpactFindingDto;
 import com.ai.change.request.analyzer.ai.dto.AiResults.RiskAnalysisResult;
+import com.ai.change.request.analyzer.ai.dto.AiResults.SecurityAnalysisResult;
 import com.ai.change.request.analyzer.ai.dto.AiResults.TestPlanResult;
 import com.ai.change.request.analyzer.ai.dto.AiResults.TestRecommendationDto;
+import com.ai.change.request.analyzer.domain.ChangeRequestRepository;
 import com.ai.change.request.analyzer.memory.AnalysisMemoryService;
 import com.ai.change.request.analyzer.rag.RagService;
+import com.ai.change.request.analyzer.security.SecurityAssessmentService;
+import com.ai.change.request.analyzer.security.SecurityAssessmentService.SecurityEvent;
 import com.ai.change.request.analyzer.tools.CodeEvidenceService;
 import com.ai.change.request.analyzer.web.AgentGatewayDtos.AnalyzeCodeResponse;
 import com.ai.change.request.analyzer.web.AgentGatewayDtos.AnalyzeImpactResponse;
@@ -25,11 +29,16 @@ import com.ai.change.request.analyzer.web.AgentGatewayDtos.ImpactFinding;
 import com.ai.change.request.analyzer.web.AgentGatewayDtos.KnowledgeHit;
 import com.ai.change.request.analyzer.web.AgentGatewayDtos.RetrieveHistoryResponse;
 import com.ai.change.request.analyzer.web.AgentGatewayDtos.RetrieveKnowledgeResponse;
+import com.ai.change.request.analyzer.web.AgentGatewayDtos.SecurityAssessmentDto;
+import com.ai.change.request.analyzer.web.AgentGatewayDtos.SecurityAssessmentRequest;
+import com.ai.change.request.analyzer.web.AgentGatewayDtos.SecurityEventDto;
 import com.ai.change.request.analyzer.web.AgentGatewayDtos.TestRecommendation;
 import com.ai.change.request.analyzer.web.AgentGatewayDtos.TextRequest;
 import jakarta.validation.Valid;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
@@ -40,7 +49,9 @@ import org.springframework.web.bind.annotation.RestController;
 
 /**
  * Contrato interno {@code /api/agent/**} consumido pelos nos do grafo LangGraph (sidecar Python).
- * Respostas tipadas; segredos nunca aparecem em logs ou respostas; toda execucao loga trace_id.
+ * Respostas tipadas; segredos nunca aparecem em logs ou respostas; toda execucao loga trace_id. O
+ * conteudo retornado pelos gateways de coleta e varrido deterministicamente em busca de instrucoes
+ * injetadas, com eventos persistidos vinculados a solicitacao (quando informada).
  */
 @RestController
 @RequestMapping("/api/agent")
@@ -53,18 +64,24 @@ public class AgentGatewayController {
   private final RagService ragService;
   private final AnalysisMemoryService memoryService;
   private final EvidenceRenderer evidenceRenderer;
+  private final SecurityAssessmentService securityAssessmentService;
+  private final ChangeRequestRepository changeRequestRepository;
 
   public AgentGatewayController(
       AiAnalysisService aiAnalysisService,
       CodeEvidenceService codeEvidenceService,
       RagService ragService,
       AnalysisMemoryService memoryService,
-      EvidenceRenderer evidenceRenderer) {
+      EvidenceRenderer evidenceRenderer,
+      SecurityAssessmentService securityAssessmentService,
+      ChangeRequestRepository changeRequestRepository) {
     this.aiAnalysisService = aiAnalysisService;
     this.codeEvidenceService = codeEvidenceService;
     this.ragService = ragService;
     this.memoryService = memoryService;
     this.evidenceRenderer = evidenceRenderer;
+    this.securityAssessmentService = securityAssessmentService;
+    this.changeRequestRepository = changeRequestRepository;
   }
 
   @PostMapping("/classify")
@@ -88,6 +105,10 @@ public class AgentGatewayController {
                         finding.file(),
                         finding.line()))
             .toList();
+    scanAndPersist(
+        body.requestId(),
+        findings.stream().map(CodeFinding::description).toList(),
+        SecurityAssessmentService.SOURCE_CODE);
     logEndpoint("analyze-code", evidence.degraded());
     return new AnalyzeCodeResponse(findings, evidence.degraded());
   }
@@ -102,6 +123,10 @@ public class AgentGatewayController {
                     new KnowledgeHit(
                         hit.source(), hit.documentId(), hit.chunkId(), hit.score(), hit.content()))
             .toList();
+    scanAndPersist(
+        body.requestId(),
+        documents.stream().map(KnowledgeHit::content).toList(),
+        SecurityAssessmentService.SOURCE_KNOWLEDGE);
     logEndpoint("retrieve-knowledge", result.degraded());
     return new RetrieveKnowledgeResponse(documents, result.degraded());
   }
@@ -112,8 +137,31 @@ public class AgentGatewayController {
         memoryService.searchByTerms(body.changeText());
     List<HistoryHit> findings =
         result.hits().stream().map(hit -> new HistoryHit(hit.requestId(), hit.summary())).toList();
+    scanAndPersist(
+        body.requestId(),
+        findings.stream().map(HistoryHit::summary).toList(),
+        SecurityAssessmentService.SOURCE_HISTORY);
     logEndpoint("retrieve-history", result.degraded());
     return new RetrieveHistoryResponse(findings, result.degraded());
+  }
+
+  /**
+   * Avaliacao de seguranca do texto da solicitacao: varredura deterministica + sugestao validada do
+   * LLM, com decisao final (uniao, dedupe, acao) deterministica no Java. Eventos persistidos quando
+   * a solicitacao e informada; falha de persistencia nao derruba o endpoint.
+   */
+  @PostMapping("/security-assessment")
+  public SecurityAssessmentDto securityAssessment(
+      @Valid @RequestBody SecurityAssessmentRequest body) {
+    SecurityAnalysisResult suggestion = aiAnalysisService.analyzeSecurity(body.changeText(), "");
+    List<SecurityEvent> events =
+        securityAssessmentService.assess(
+            body.changeText(),
+            SecurityAssessmentService.SOURCE_REQUEST_TEXT,
+            suggestion.findings());
+    persistEvents(body.requestId(), events);
+    logEndpoint("security-assessment", suggestion.degraded());
+    return toSecurityAssessmentDto(events);
   }
 
   @PostMapping("/analyze-impact")
@@ -154,6 +202,42 @@ public class AgentGatewayController {
         result.recommendations().stream().map(this::toRecommendation).toList();
     logEndpoint("generate-test-plan", result.degraded());
     return new GenerateTestPlanResponse(recommendations, result.degraded());
+  }
+
+  private void scanAndPersist(String requestId, List<String> contents, String source) {
+    List<SecurityEvent> events = new ArrayList<>();
+    for (String content : contents) {
+      events.addAll(securityAssessmentService.scan(content, source));
+    }
+    persistEvents(requestId, events);
+  }
+
+  private void persistEvents(String requestId, List<SecurityEvent> events) {
+    if (events.isEmpty() || requestId == null || requestId.isBlank()) {
+      return;
+    }
+    try {
+      UUID id = UUID.fromString(requestId);
+      changeRequestRepository
+          .findById(id)
+          .ifPresent(request -> securityAssessmentService.persist(request, events));
+    } catch (IllegalArgumentException e) {
+      log.warn(
+          "security_scan_invalid_request_id request_id={} trace_id={}",
+          requestId,
+          MDC.get("trace_id"));
+    }
+  }
+
+  private SecurityAssessmentDto toSecurityAssessmentDto(List<SecurityEvent> events) {
+    List<SecurityEventDto> dtos =
+        events.stream()
+            .map(
+                event ->
+                    new SecurityEventDto(
+                        event.type(), event.source(), event.evidence(), event.action()))
+            .toList();
+    return new SecurityAssessmentDto(!dtos.isEmpty(), dtos);
   }
 
   private ImpactFinding toImpactFinding(ImpactFindingDto dto) {
