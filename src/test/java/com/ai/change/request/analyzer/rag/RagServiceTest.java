@@ -6,9 +6,11 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.ai.change.request.analyzer.observability.TraceEvent;
 import com.ai.change.request.analyzer.observability.TraceEventRepository;
 import com.ai.change.request.analyzer.observability.TraceService;
 import com.ai.change.request.analyzer.resilience.ResilienceExecutor;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -21,6 +23,8 @@ import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.beans.factory.ObjectProvider;
 
 class RagServiceTest {
+
+  private TraceEventRepository traceRepository;
 
   private RagService serviceWith(VectorStore store) {
     return serviceWith(store, 5000);
@@ -49,9 +53,10 @@ class RagServiceTest {
             return store;
           }
         };
-    TraceService traceService = new TraceService(Mockito.mock(TraceEventRepository.class));
+    traceRepository = Mockito.mock(TraceEventRepository.class);
+    TraceService traceService = new TraceService(traceRepository);
     ResilienceExecutor executor = new ResilienceExecutor(traceService, 0, 10);
-    return new RagService(provider, 4, 0.7, executor, traceService, timeoutMs);
+    return new RagService(provider, 4, 0.7, executor, traceService, new ObjectMapper(), timeoutMs);
   }
 
   private Document document(String id, double score, String source) {
@@ -178,5 +183,74 @@ class RagServiceTest {
 
     assertThat(result.hits()).isEmpty();
     assertThat(result.degraded()).isTrue();
+  }
+
+  @Test
+  void successfulSearchRecordsSourcesDetailWithoutDocumentContent() {
+    VectorStore store = mock(VectorStore.class);
+    when(store.similaritySearch(any(SearchRequest.class)))
+        .thenReturn(
+            List.of(
+                document("d-0", 0.92, "discount-policy.md"),
+                document("d-1", 0.98, "business-rules.md")));
+    RagService service = serviceWith(store);
+
+    service.search("desconto VIP");
+
+    ArgumentCaptor<TraceEvent> captor = ArgumentCaptor.forClass(TraceEvent.class);
+    Mockito.verify(traceRepository, Mockito.atLeastOnce()).save(captor.capture());
+    TraceEvent sourcesEvent =
+        captor.getAllValues().stream().filter(e -> e.getDetail() != null).findFirst().orElse(null);
+    assertThat(sourcesEvent).isNotNull();
+    assertThat(sourcesEvent.getEvent()).isEqualTo("rag_search");
+    assertThat(sourcesEvent.getDetail())
+        .contains("business-rules.md", "discount-policy.md", "document_id", "score");
+    assertThat(sourcesEvent.getDetail()).doesNotContain("conteudo de");
+  }
+
+  @Test
+  void successfulSearchWithoutHitsRecordsEmptySourcesDetail() {
+    VectorStore store = mock(VectorStore.class);
+    when(store.similaritySearch(any(SearchRequest.class))).thenReturn(List.of());
+    RagService service = serviceWith(store);
+
+    service.search("query");
+
+    ArgumentCaptor<TraceEvent> captor = ArgumentCaptor.forClass(TraceEvent.class);
+    Mockito.verify(traceRepository, Mockito.atLeastOnce()).save(captor.capture());
+    TraceEvent sourcesEvent =
+        captor.getAllValues().stream()
+            .filter(e -> "rag_search".equals(e.getEvent()) && e.getDetail() != null)
+            .findFirst()
+            .orElse(null);
+    assertThat(sourcesEvent).isNotNull();
+    assertThat(sourcesEvent.getDetail()).isEqualTo("[]");
+  }
+
+  @Test
+  void degradedSearchRecordsNoSourcesDetail() {
+    VectorStore store = mock(VectorStore.class);
+    when(store.similaritySearch(any(SearchRequest.class)))
+        .thenThrow(new IllegalStateException("pgvector fora"));
+    RagService service = serviceWith(store);
+
+    RagService.KnowledgeSearchResult result = service.search("query");
+
+    assertThat(result.degraded()).isTrue();
+    ArgumentCaptor<TraceEvent> captor = ArgumentCaptor.forClass(TraceEvent.class);
+    Mockito.verify(traceRepository, Mockito.atLeastOnce()).save(captor.capture());
+    assertThat(captor.getAllValues()).allSatisfy(e -> assertThat(e.getDetail()).isNull());
+  }
+
+  @Test
+  void unavailableStoreRecordsNoSourcesDetail() {
+    RagService service = serviceWith(null);
+
+    RagService.KnowledgeSearchResult result = service.search("query");
+
+    assertThat(result.degraded()).isTrue();
+    ArgumentCaptor<TraceEvent> captor = ArgumentCaptor.forClass(TraceEvent.class);
+    Mockito.verify(traceRepository, Mockito.atLeastOnce()).save(captor.capture());
+    assertThat(captor.getAllValues()).allSatisfy(e -> assertThat(e.getDetail()).isNull());
   }
 }

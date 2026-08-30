@@ -90,4 +90,30 @@ class TraceEventRepositoryTest {
             });
     assertThat(repository.findByTraceIdOrderByCreatedAtAsc("trace-b")).hasSize(1);
   }
+
+  @Test
+  void savesAndRecoversOptionalDetail() {
+    String detail =
+        "[{\"source\":\"discount-policy.md\",\"document_id\":\"doc-1\",\"score\":0.92}]";
+    repository.save(
+        new TraceEvent(
+            "trace-c",
+            "req-3",
+            "retrieve_knowledge",
+            "rag_search",
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            detail,
+            Instant.now()));
+
+    List<TraceEvent> events = repository.findByTraceIdOrderByCreatedAtAsc("trace-c");
+
+    assertThat(events).hasSize(1);
+    assertThat(events.get(0).getDetail()).isEqualTo(detail);
+    assertThat(events.get(0).getNode()).isEqualTo("retrieve_knowledge");
+  }
 }

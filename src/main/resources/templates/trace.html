@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="pt-BR" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trace da execução</title>
+    <link rel="stylesheet" th:href="@{/css/app.css}">
+</head>
+<body>
+<header class="app-header">
+    <h1>AI Change Request Analyzer</h1>
+    <nav>
+        <a th:href="@{/}">Nova solicitação</a>
+    </nav>
+</header>
+<main class="app-main">
+    <h2 class="page-title">Execução <code th:text="${traceId}"></code></h2>
+
+    <section class="card">
+        <h2>Documentos recuperados</h2>
+        <p th:if="${!hasDocuments}">Nenhum documento recuperado nesta execução.</p>
+        <div th:each="item : ${items}" th:if="${!item.documents.isEmpty()}">
+            <p><strong>Etapa:</strong> <span th:text="${item.event.node}"></span> —
+                <span th:text="${item.event.event}"></span></p>
+            <table>
+                <thead>
+                <tr><th>Origem</th><th>Documento</th><th>Score</th></tr>
+                </thead>
+                <tbody>
+                <tr th:each="doc : ${item.documents}">
+                    <td th:text="${doc.source}"></td>
+                    <td th:text="${doc.documentId}"></td>
+                    <td th:text="${doc.score}"></td>
+                </tr>
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <section class="card">
+        <h2>Eventos</h2>
+        <table>
+            <thead>
+            <tr>
+                <th>Etapa</th><th>Evento</th><th>Duração (ms)</th><th>Status</th>
+                <th>Erro</th><th>Tool</th><th>Modelo</th><th>Momento</th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr th:each="item : ${items}">
+                <td th:text="${item.event.node}"></td>
+                <td th:text="${item.event.event}"></td>
+                <td th:text="${item.event.durationMs}"></td>
+                <td th:text="${item.event.status}"></td>
+                <td th:text="${item.event.error}"></td>
+                <td th:text="${item.event.tool}"></td>
+                <td th:text="${item.event.model}"></td>
+                <td th:text="${item.event.createdAt}"></td>
+            </tr>
+            </tbody>
+        </table>
+    </section>
+</main>
+</body>
+</html>
