@@ -78,6 +78,7 @@ Plano consolidado das fases originais (chat) em **10 changes OpenSpec**, na orde
 | Prompt injection | `SecurityAssessment` | ... | `InjectionTest` |
 | Human approval | `ApprovalService` | ... | `ApprovalTest` |
 | Observabilidade | `observability/` (TraceService, TraceEvent, AnalysisMetrics) | `docs/evidence/07-observability.png` | `TraceTest` |
+| Frontend web | `web/WebController` + templates Thymeleaf + `static/css/app.css` | `docs/evidence/08-frontend.png` | `WebUiTest`/`TraceViewTest`/`WebE2ETest` |
 | Resiliência | `resilience/ResilienceExecutor` + retry/backoff/fallback | idem | `ResilienceTest` |
 | AI code review / test generation | QA service | ... | QA tests |
 | E2E | `e2e/` | ... | `E2ETest` |
@@ -88,7 +89,7 @@ Plano consolidado das fases originais (chat) em **10 changes OpenSpec**, na orde
 
 ## Evidências (uma objetiva por requisito, em `docs/evidence/`)
 
-`01-langgraph.png`, `02-parallel-execution.png`, `03-rag.png`, `04-mcp.png`, `05-prompt-injection.png`, `06-human-approval.png`, `07-observability.png`, `08-ai-code-review.png`, `09-e2e.png`, `10-github-actions.png`, `11-anomaly.png`, `12-n8n.png`, `13-prompt-refinement.png`.
+`01-langgraph.png`, `02-parallel-execution.png`, `03-rag.png`, `04-mcp.png`, `05-prompt-injection.png`, `06-human-approval.png`, `07-observability.png`, `08-frontend.png`, `09-ai-code-review.png`, `10-e2e.png`, `11-github-actions.png`, `12-anomaly.png`, `13-n8n.png`, `14-prompt-refinement.png`.
 
 ## Roteiro do vídeo de demonstração (8–10 min)
 

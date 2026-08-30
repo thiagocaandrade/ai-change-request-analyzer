@@ -2,7 +2,7 @@
 
 Aplicação acadêmica que recebe uma solicitação de alteração em software e produz uma análise estruturada de impacto, risco e testes. O agente **não** altera código automaticamente.
 
-Caminho executável de ponta a ponta: fundação (`foundation`), domínio e API (`domain-and-api`), orquestração LangGraph completa (`langgraph-orchestration`), **IA, tools, RAG e memória reais** (`ai-rag-memory-tools`), **segurança + aprovação humana** (`security-and-human-approval`) e **observabilidade + resiliência** (`observability-and-resilience`): logs JSON com campos padronizados, eventos de auditoria persistidos por execução (`GET /api/traces/{traceId}`), métricas Micrometer e política única de resiliência (timeout/retry/backoff/fallback) em LLM, MCP, RAG e tools. As changes 07+ seguem em `docs/roadmap.md`.
+Caminho executável de ponta a ponta: fundação (`foundation`), domínio e API (`domain-and-api`), orquestração LangGraph completa (`langgraph-orchestration`), **IA, tools, RAG e memória reais** (`ai-rag-memory-tools`), **segurança + aprovação humana** (`security-and-human-approval`), **observabilidade + resiliência** (`observability-and-resilience`): logs JSON com campos padronizados, eventos de auditoria persistidos por execução (`GET /api/traces/{traceId}`), métricas Micrometer e política única de resiliência (timeout/retry/backoff/fallback) em LLM, MCP, RAG e tools — e **interface web** (`frontend`): páginas Thymeleaf de formulário, resultado com aprovação humana e trace da execução. As changes 08+ seguem em `docs/roadmap.md`.
 
 ## Visão geral dos componentes
 
@@ -73,7 +73,7 @@ Resposta de `POST /analyze`: `{request_id, status, result}` com `status` em `com
 
 - **Base de conhecimento:** `knowledge/` com 6 documentos (architecture, business-rules, discount-policy, coding-guidelines, testing-guidelines, security-policy), incluindo a regra VIP 10% do Cenário A.
 - **Ingestão idempotente:** migration idempotente (`PgVectorSchemaMigration`: `CREATE EXTENSION IF NOT EXISTS vector` + tabela `vector_store` + índice HNSW) e `KnowledgeIngestionService` (chunking por seção/parágrafo + embeddings + ingestão no startup **somente se a base estiver vazia** — restart não duplica).
-- **Busca com metadata:** `RagService` com top-k configurável (`ai.rag.top-k`, default 4), threshold (`ai.rag.similarity-threshold`) e resultados com `source`, `document_id`, `chunk_id` e `score`, em ordem decrescente. A busca executa com timeout (`ai.rag.timeout-ms`), retry limitado e backoff via `ResilienceExecutor`; falha, estouro de tempo ou base vazia → lista vazia marcada (degradada). Evidência: `docs/evidence/03-rag.png`.
+- **Busca com metadata:** `RagService` com top-k configurável (`ai.rag.top-k`, default 4), threshold (`ai.rag.similarity-threshold`) e resultados com `source`, `document_id`, `chunk_id` e `score`, em ordem decrescente. A busca executa com timeout (`ai.rag.timeout-ms`), retry limitado e backoff via `ResilienceExecutor`; falha, estouro de tempo ou base vazia → lista vazia marcada (degradada). Busca bem-sucedida registra as fontes no evento `rag_search` (`detail` do `TraceEvent`), visíveis na página de trace. Evidência: `docs/evidence/03-rag.png`.
 - **Embeddings configuráveis por env:** sem `ai.embedding.api-key` o RAG desativa e a análise segue degradada.
 
 ## Memória persistente
@@ -88,6 +88,17 @@ Resposta de `POST /analyze`: `{request_id, status, result}` com `status` em `com
 - **LLM assiste, o Java decide:** etapa `security-analysis` com prompt versionado `security-analysis-v1.txt` (conteúdo recuperado na seção delimitada `DADOS NÃO CONFIÁVEIS`), structured output validado, retry máx. 2 e fallback determinístico marcado; a decisão final (união, dedupe, ação) é sempre determinística na aplicação.
 - **Aprovação humana:** risco HIGH ⇒ aprovação `PENDING` (regra de `RiskPolicy`, intocada); somente `POST /api/change-requests/{id}/approval` (`{approver, decision}` APPROVED|REJECTED) transita o estado, registrando approver, decision, decidedAt e trace_id. Decisão inválida → 400, solicitação inexistente → 404, fora de PENDING ou não exigida → 409.
 - **Cenário B ponta a ponta:** fixture no repositório com a frase oficial de injeção → evento persistido na análise, risco permanece HIGH, aprovação PENDING → decisão humana via endpoint. Evidências: `docs/evidence/05-prompt-injection.png` (evento registrado + análise concluída) e `docs/evidence/06-human-approval.png` (decisão APPROVED/REJECTED no endpoint).
+
+## Interface web (Thymeleaf)
+
+Uma tela server-side (sem SPA, sem framework JS) para operar o analisador pelo navegador — as páginas consomem a mesma API REST existente (`WebController` delega aos controllers REST, sem duplicar o pipeline):
+
+- **Formulário (`GET /`):** descreve a solicitação e submete (`POST /change-requests`); texto em branco é rejeitado com mensagem no próprio formulário (sem chamar o agente); texto válido dispara a análise e redireciona (303) para o resultado. Inclui consulta de execução por `trace_id`.
+- **Resultado (`GET /requests/{id}`):** status, nível de risco (badge LOW/MEDIUM/HIGH), confiança, justificativa, findings, testes recomendados, eventos de segurança e estado de aprovação. HIGH + PENDING exibe o formulário de decisão (aprovador + APPROVED/REJECTED → `POST /requests/{id}/approval`); LOW/MEDIUM indica "aprovação não exigida"; decisão registrada reflete APPROVED/REJECTED com o aprovador; análise `FAILED` exibe o motivo legível; solicitação inexistente → página 404 amigável (HTML, não o JSON do handler REST).
+- **Trace (`GET /traces/{traceId}`):** reconstrói a execução com eventos em ordem cronológica (etapa, evento, duração, status, erro, tool, modelo, momento) e a seção de documentos recuperados (origem + score) — o `RagService` registra as fontes no campo opcional `detail` do `TraceEvent` (JSON compacto `[{source, document_id, score}]` truncado a 1024 caracteres, nunca o conteúdo dos documentos); busca degradada não registra `detail`; trace inexistente → página amigável.
+- **Escaping garantido:** todo conteúdo não confiável (solicitação, findings, evidências de segurança, fontes recuperadas) é renderizado com `th:text` (escapamento automático do Thymeleaf); `th:utext` não é usado. Nenhum segredo aparece nas páginas.
+- **Estilo:** `static/css/app.css` único (cabeçalho, cartões, badges por nível de risco/status, tabelas de eventos, layout responsivo).
+- **Evidência:** `docs/evidence/08-frontend.png` (formulário, resultado HIGH e página de trace); captura reproduzível via `.kilo/scripts/frontend-evidence.ps1` (renderiza as páginas com `FrontendEvidenceDumpTest` e captura com Edge headless).
 
 ## Execução via Docker Compose
 
@@ -190,6 +201,12 @@ Toda configuração é fornecida por variáveis de ambiente (referência em `.en
 | `app` | GET | `/api/change-requests/{id}/analysis` | Consulta a análise completa tipada, incluindo avaliação de segurança |
 | `app` | POST | `/api/change-requests/{id}/approval` | Decisão humana (APPROVED\|REJECTED) para análise com aprovação exigida |
 | `app` | GET | `/api/traces/{traceId}` | Reconstrução da execução: eventos de auditoria em ordem cronológica (404 sem eventos) |
+| `app` | GET | `/` | Página web: formulário de solicitação (Thymeleaf) |
+| `app` | POST | `/change-requests` | Submete o formulário (valida texto em branco) e redireciona (303) para o resultado |
+| `app` | GET | `/requests/{id}` | Página web: resultado da análise com decisão de aprovação |
+| `app` | POST | `/requests/{id}/approval` | Registra a decisão humana pela página (redireciona para o resultado) |
+| `app` | POST | `/traces` | Consulta de trace pela página (redireciona para `/traces/{traceId}`) |
+| `app` | GET | `/traces/{traceId}` | Página web: reconstrução da execução com documentos recuperados |
 | `app` | GET | `/actuator/health` | Health check |
 | `app` | GET | `/actuator/metrics` | Métricas Micrometer (`analysis_duration`, `llm_calls`, `tool_calls`, `tool_errors`, `high_risk_changes`, `prompt_injection_count`, `validation_failures`) |
 | `app` | POST | `/api/agent/classify` | Classificação da solicitação (IA/fallback marcado) |
@@ -207,7 +224,7 @@ Toda configuração é fornecida por variáveis de ambiente (referência em `.en
 ## Observabilidade
 
 - **Logs JSON com campos padronizados** (`logstash-logback-encoder`, sem mudanças no logback): toda linha carrega `trace_id` e `request_id` do MDC (gerados no `TraceIdFilter`, que também loga `node=http`, `event=request_started/request_finished`, `status` e `duration_ms`); componentes instrumentados emitem `node`, `event`, `duration_ms`, `status`, `error`, `risk`, `tool` e `model` — `ChangeRequestController` e `AnalysisService` (pipeline, com `risk`), `AgentGatewayController` (started/completed por endpoint do grafo), `AiAnalysisService` (`model`), `ResilientToolCallback` (`tool`), `RagService`, `AgentClient` e `ResilienceExecutor` (cada tentativa).
-- **Segundo sinal — auditoria persistida:** cada evento é gravado na tabela `trace_event` (trace_id, request_id, node, event, duration_ms, status, error, risk, tool, model, createdAt) via `TraceService`; `GET /api/traces/{traceId}` reconstrói a execução em ordem cronológica (404 para trace inexistente). Falha de persistência de telemetria é registrada e nunca derruba a análise; nenhum evento contém segredos.
+- **Segundo sinal — auditoria persistida:** cada evento é gravado na tabela `trace_event` (trace_id, request_id, node, event, duration_ms, status, error, risk, tool, model, detail, createdAt) via `TraceService`; `GET /api/traces/{traceId}` reconstrói a execução em ordem cronológica (404 para trace inexistente). Falha de persistência de telemetria é registrada e nunca derruba a análise; nenhum evento contém segredos.
 - **Métricas (terceiro sinal complementar):** `AnalysisMetrics` (Micrometer via Actuator) registra `analysis_duration`, `llm_calls`, `tool_calls`, `tool_errors`, `high_risk_changes`, `prompt_injection_count` e `validation_failures`, expostas em `/actuator/metrics`.
 - `agent`: structlog em JSON usando o `trace_id` do cabeçalho (gera um próprio se ausente).
 - Todos os sinais correlacionam-se pelo mesmo `trace_id` — fluxo, decisões, erros e latência de uma execução são investigáveis de ponta a ponta. Evidência: `docs/evidence/07-observability.png`.
@@ -220,7 +237,7 @@ Toda configuração é fornecida por variáveis de ambiente (referência em `.en
 
 ## Testes e CI
 
-- Java: `./mvnw test` (happy path, segurança/path traversal, structured output com ChatModel fake, detecção determinística de injeção, endpoint de aprovação 200/400/404/409, RAG com VectorStore mockado, memória com H2, MCP, controller `/api/agent`, reconstrução de trace com `TraceTest`/`TraceEndpointTest`, cenários integrados de resiliência com `ResilienceTest`, métricas com `AnalysisMetricsTest`/`MetricsInstrumentationTest`, executor com `ResilienceExecutorTest`) e `./mvnw spotless:check`. Suíte inteira verde **sem chave de API**.
+- Java: `./mvnw test` (happy path, segurança/path traversal, structured output com ChatModel fake, detecção determinística de injeção, endpoint de aprovação 200/400/404/409, RAG com VectorStore mockado, memória com H2, MCP, controller `/api/agent`, reconstrução de trace com `TraceTest`/`TraceEndpointTest`, páginas web com `WebUiTest`/`TraceViewTest`/`WebE2ETest` — formulário válido/vazio, resultado HIGH com aprovação refletida, falha do agente, 404 amigável, escaping de HTML, eventos ordenados com documentos recuperados, Cenários A/B pelas páginas, cenários integrados de resiliência com `ResilienceTest`, métricas com `AnalysisMetricsTest`/`MetricsInstrumentationTest`, executor com `ResilienceExecutorTest`) e `./mvnw spotless:check`. Suíte inteira verde **sem chave de API**.
 - Python (em `agent/`): `pytest` e `ruff check .` — cobre o grafo nos cenários do roadmap (happy path, high risk, prompt injection com avaliação obtida da aplicação, endpoint de segurança indisponível, tool failure, validation failure, max iteration), aplicação indisponível, paralelismo e propagação de trace_id, com client HTTP mockado.
 - E2E: `docker compose up --build` + `python scripts/smoke_test.py` — Cenário A (desconto VIP 10%→15%) e Cenário B adversário (fixture com a frase oficial de injeção → evento de segurança persistido, risco HIGH permanece PENDING, decisão humana via endpoint), com chave configurada ou fluxo degradado marcado (`analysis_unavailable`) sem chave; `trace_id` correlacionado nos logs dos dois serviços.
 - Demonstrações: `scripts/rag_demo.py` (RAG com fontes/scores), `scripts/mcp_tools_demo.py` (MCP tools/list + proteção de path), `scripts/fake_embeddings_server.py` (embeddings determinísticos locais só para demonstração), `scripts/generate_evidence.py` (gera as evidências 05/06 como placeholders até os screenshots reais da demonstração).
