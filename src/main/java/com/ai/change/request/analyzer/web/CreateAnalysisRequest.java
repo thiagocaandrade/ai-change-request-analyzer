@@ -18,9 +18,7 @@ public record CreateAnalysisRequest(
       @Size(max = 16) String severity) {}
 
   public record RiskDto(
-      @NotNull RiskLevel level,
-      @NotNull Double confidence,
-      @Size(max = 4000) String rationale) {}
+      @NotNull RiskLevel level, @NotNull Double confidence, @Size(max = 4000) String rationale) {}
 
   public record RecommendationDto(
       @NotBlank @Size(max = 200) String component,

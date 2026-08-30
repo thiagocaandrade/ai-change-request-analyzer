@@ -13,7 +13,6 @@ import com.ai.change.request.analyzer.service.AgentResultMapper;
 import com.ai.change.request.analyzer.service.AnalysisService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
-import java.util.List;
 import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -60,8 +59,7 @@ public class ChangeRequestController {
 
     try {
       var agentResponse = agentClient.analyze(request.getId().toString(), body.text(), traceId);
-      ChangeAnalysis analysis =
-          agentResultMapper.toAnalysis(request, agentResponse.result());
+      ChangeAnalysis analysis = agentResultMapper.toAnalysis(request, agentResponse.result());
       analysisService.persistAnalysis(request, analysis);
       request.setStatus(ChangeRequestStatus.COMPLETED);
     } catch (AgentUnavailableException e) {
@@ -104,12 +102,16 @@ public class ChangeRequestController {
         riskAssessment != null ? riskAssessment.getConfidence() : null,
         riskAssessment != null ? riskAssessment.getRationale() : null,
         analysis.getFindings().stream()
-            .map(f -> new CreateAnalysisRequest.FindingDto(
-                f.getComponent(), f.getDescription(), f.getSeverity()))
+            .map(
+                f ->
+                    new CreateAnalysisRequest.FindingDto(
+                        f.getComponent(), f.getDescription(), f.getSeverity()))
             .toList(),
         analysis.getRecommendations().stream()
-            .map(r -> new CreateAnalysisRequest.RecommendationDto(
-                r.getComponent(), r.getDescription(), r.getPriority()))
+            .map(
+                r ->
+                    new CreateAnalysisRequest.RecommendationDto(
+                        r.getComponent(), r.getDescription(), r.getPriority()))
             .toList(),
         approval != null ? approval.isRequired() : null,
         approval != null ? approval.getStatus() : null);
