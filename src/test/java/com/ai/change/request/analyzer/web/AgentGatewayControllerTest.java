@@ -7,14 +7,18 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 
 import com.ai.change.request.analyzer.ai.AiAnalysisService;
 import com.ai.change.request.analyzer.ai.dto.AiResults.ClassificationResult;
+import com.ai.change.request.analyzer.ai.dto.AiResults.CodeReviewFindingDto;
+import com.ai.change.request.analyzer.ai.dto.AiResults.CodeReviewResult;
 import com.ai.change.request.analyzer.ai.dto.AiResults.ImpactAnalysisResult;
 import com.ai.change.request.analyzer.ai.dto.AiResults.RiskAnalysisResult;
+import com.ai.change.request.analyzer.ai.dto.AiResults.RiskCategorySuggestionDto;
 import com.ai.change.request.analyzer.ai.dto.AiResults.TestPlanResult;
 import com.ai.change.request.analyzer.ai.dto.AiResults.TestRecommendationDto;
 import com.ai.change.request.analyzer.domain.ChangeRequest;
 import com.ai.change.request.analyzer.domain.ChangeRequestRepository;
 import com.ai.change.request.analyzer.domain.ChangeRequestStatus;
 import com.ai.change.request.analyzer.memory.AnalysisMemoryService;
+import com.ai.change.request.analyzer.qa.QaReviewRecordRepository;
 import com.ai.change.request.analyzer.rag.RagService;
 import com.ai.change.request.analyzer.security.SecurityAssessmentRepository;
 import com.ai.change.request.analyzer.tools.CodeEvidenceService;
@@ -45,6 +49,8 @@ class AgentGatewayControllerTest {
   @Autowired private ChangeRequestRepository changeRequestRepository;
 
   @Autowired private SecurityAssessmentRepository securityAssessmentRepository;
+
+  @Autowired private QaReviewRecordRepository qaReviewRecordRepository;
 
   @MockitoBean private AiAnalysisService aiAnalysisService;
 
@@ -124,6 +130,10 @@ class AgentGatewayControllerTest {
 
   @Test
   void generateTestPlanReturnsTypedRecommendations() throws Exception {
+    when(ragService.search(anyString()))
+        .thenReturn(new RagService.KnowledgeSearchResult(List.of(), true));
+    when(aiAnalysisService.reviewCode(anyString(), anyString()))
+        .thenReturn(new CodeReviewResult(List.of(), List.of(), true));
     when(aiAnalysisService.generateTestPlan(anyString(), anyString()))
         .thenReturn(
             new TestPlanResult(
@@ -144,6 +154,116 @@ class AgentGatewayControllerTest {
     assertThat(result.getResponse().getStatus()).isEqualTo(200);
     JsonNode body = objectMapper.readTree(result.getResponse().getContentAsString());
     assertThat(body.get("recommendations").get(0).get("component").asText()).isEqualTo("unit");
+  }
+
+  @Test
+  void generateTestPlanRunsQaAndReturnsPrioritizedRecommendationsAndPersistsRecords()
+      throws Exception {
+    when(ragService.search(anyString()))
+        .thenReturn(
+            new RagService.KnowledgeSearchResult(
+                List.of(
+                    new RagService.KnowledgeHit(
+                        "business-rules.md",
+                        "business-rules",
+                        "business-rules-0",
+                        0.9,
+                        "Clientes VIP recebem desconto de 10%")),
+                false));
+    when(aiAnalysisService.reviewCode(anyString(), anyString()))
+        .thenReturn(
+            new CodeReviewResult(
+                List.of(
+                    new CodeReviewFindingDto(
+                        "discount-service", "teste de regressao ausente", "HIGH", "business-rules.md")),
+                List.of(
+                    new RiskCategorySuggestionDto(
+                        "financial_business_rule_regression", "HIGH", "MEDIUM")),
+                false));
+    when(aiAnalysisService.generateTestPlan(anyString(), anyString()))
+        .thenReturn(
+            new TestPlanResult(
+                List.of(
+                    new TestRecommendationDto(
+                        "discount-service", "cobrir desconto VIP de 15%", "HIGH")),
+                false));
+    String requestId = createRequest().getId().toString();
+
+    var result =
+        mockMvc
+            .perform(
+                post("/api/agent/generate-test-plan")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(
+                        "{\"changeText\":\"Alterar desconto VIP\",\"risk\":{},\"classification\":{},"
+                            + "\"impactFindings\":[],\"requestId\":\""
+                            + requestId
+                            + "\"}"))
+            .andReturn();
+
+    assertThat(result.getResponse().getStatus()).isEqualTo(200);
+    JsonNode body = objectMapper.readTree(result.getResponse().getContentAsString());
+    assertThat(body.get("degraded").asBoolean()).isFalse();
+    JsonNode qa = body.get("qa");
+    assertThat(qa.get("findings").get(0).get("component").asText()).isEqualTo("discount-service");
+    assertThat(qa.get("recommendations").get(0).get("priority").asText()).isEqualTo("HIGH");
+    assertThat(qa.get("recommendations").get(0).get("priorityJustification").asText())
+        .contains("matriz deterministica");
+    assertThat(qa.get("recommendations").get(0).get("riskCategory").asText())
+        .isEqualTo("financial_business_rule_regression");
+    assertThat(qa.get("record").get("promptVersion").asText()).isEqualTo("code-review-v1");
+
+    var records = qaReviewRecordRepository.findByChangeRequestIdOrderByCreatedAtAsc(UUID.fromString(requestId));
+    assertThat(records).hasSize(2);
+    var reviewRecord = records.get(0);
+    assertThat(reviewRecord.getStage()).isEqualTo("CODE_REVIEW");
+    assertThat(reviewRecord.getPromptVersion()).isEqualTo("code-review-v1");
+    assertThat(reviewRecord.getFindings()).hasSize(1);
+    var generationRecord = records.get(1);
+    assertThat(generationRecord.getStage()).isEqualTo("TEST_GENERATION");
+    assertThat(generationRecord.getIterations()).isZero();
+  }
+
+  @Test
+  void generateTestPlanWithDegradedQaReturnsMarkedQaBlockAndJustifiedRecommendations()
+      throws Exception {
+    when(ragService.search(anyString()))
+        .thenReturn(new RagService.KnowledgeSearchResult(List.of(), true));
+    when(aiAnalysisService.reviewCode(anyString(), anyString()))
+        .thenReturn(new CodeReviewResult(List.of(), List.of(), true));
+    when(aiAnalysisService.generateTestPlan(anyString(), anyString()))
+        .thenReturn(
+            new TestPlanResult(
+                List.of(
+                    new TestRecommendationDto(
+                        "unit", "teste unitario da regra afetada (degradado)", "MEDIUM")),
+                true));
+    String requestId = createRequest().getId().toString();
+
+    var result =
+        mockMvc
+            .perform(
+                post("/api/agent/generate-test-plan")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(
+                        "{\"changeText\":\"Alterar desconto VIP\",\"risk\":{},\"classification\":{},"
+                            + "\"impactFindings\":[],\"requestId\":\""
+                            + requestId
+                            + "\"}"))
+            .andReturn();
+
+    assertThat(result.getResponse().getStatus()).isEqualTo(200);
+    JsonNode body = objectMapper.readTree(result.getResponse().getContentAsString());
+    assertThat(body.get("degraded").asBoolean()).isTrue();
+    JsonNode qa = body.get("qa");
+    assertThat(qa.get("degraded").asBoolean()).isTrue();
+    assertThat(qa.get("findings").isEmpty()).isTrue();
+    assertThat(qa.get("recommendations").get(0).get("priorityJustification").asText())
+        .isNotBlank();
+
+    var records = qaReviewRecordRepository.findByChangeRequestIdOrderByCreatedAtAsc(UUID.fromString(requestId));
+    assertThat(records).hasSize(2);
+    assertThat(records).allSatisfy(record -> assertThat(record.isDegraded()).isTrue());
   }
 
   @Test

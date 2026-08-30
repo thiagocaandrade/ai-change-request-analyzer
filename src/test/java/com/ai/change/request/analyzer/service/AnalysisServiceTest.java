@@ -13,6 +13,7 @@ import com.ai.change.request.analyzer.domain.RiskLevel;
 import com.ai.change.request.analyzer.domain.RiskPolicy;
 import com.ai.change.request.analyzer.observability.AnalysisMetrics;
 import com.ai.change.request.analyzer.observability.TraceService;
+import com.ai.change.request.analyzer.qa.QaRecordService;
 import com.ai.change.request.analyzer.security.SecurityAssessment;
 import com.ai.change.request.analyzer.security.SecurityAssessmentRepository;
 import com.ai.change.request.analyzer.security.SecurityAssessmentService;
@@ -38,6 +39,7 @@ import org.springframework.test.context.ActiveProfiles;
   SecurityAssessmentService.class,
   AnalysisMetrics.class,
   TraceService.class,
+  QaRecordService.class,
   AnalysisServiceTest.MetricsConfig.class
 })
 @ActiveProfiles("test")

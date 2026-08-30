@@ -165,18 +165,23 @@ def make_assess_risk(client):
 
 def make_generate_test_plan(client):
     def generate_test_plan(state):
+        request_id = ((state.get("change_request") or {}).get("request_id")) or None
         payload = {
             "changeText": _text(state),
             "risk": state.get("risk_assessment") or {},
             "classification": state.get("classification") or {},
             "impactFindings": state.get("impact_findings") or [],
         }
+        if request_id:
+            payload["requestId"] = request_id
         errors = []
         try:
             response = client.generate_test_plan(payload, _trace_id(state))
             test_plan = response.get("recommendations") or []
+            qa = response.get("qa")
         except AgentUnavailableError as exc:
             test_plan = list(DEGRADED_PLAN)
+            qa = None
             errors = _error("generate_test_plan", exc)
         risk = state.get("risk_assessment") or {}
         final_result = {
@@ -187,6 +192,7 @@ def make_generate_test_plan(client):
             "rationale": risk.get("rationale"),
             "findings": state.get("impact_findings") or [],
             "test_plan": test_plan,
+            "qa": qa,
             "security_assessment": state.get("security_assessment")
             or {"detected": False, "events": []},
             "approval": {

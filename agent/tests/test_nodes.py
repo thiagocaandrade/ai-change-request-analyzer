@@ -118,6 +118,18 @@ def test_generate_test_plan_uses_application_recommendations():
     assert result["iteration_count"] == 1
 
 
+def test_generate_test_plan_passes_qa_block_through_to_final_result():
+    state = base_state()
+    state["risk_assessment"] = {"level": "MEDIUM", "confidence": 0.5, "rationale": "r"}
+    fn = nodes.make_generate_test_plan(happy_client())
+    result = fn(state)
+    qa = result["final_result"]["qa"]
+    assert qa is not None
+    assert qa["findings"][0]["component"] == "discount-service"
+    assert qa["recommendations"][0]["riskCategory"] == "financial_business_rule_regression"
+    assert qa["record"]["stage"] == "CODE_REVIEW"
+
+
 def test_generate_test_plan_failure_uses_marked_degraded_plan():
     state = base_state()
     state["risk_assessment"] = {"level": "MEDIUM", "confidence": 0.5, "rationale": "r"}

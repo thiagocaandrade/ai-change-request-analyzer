@@ -58,7 +58,9 @@ public final class AgentGatewayDtos {
       @NotBlank @Size(max = 4000) String changeText,
       Map<String, Object> risk,
       Map<String, Object> classification,
-      List<Map<String, Object>> impactFindings) {}
+      List<Map<String, Object>> impactFindings,
+      String diff,
+      String requestId) {}
 
   public record TestRecommendation(
       String component,
@@ -68,6 +70,33 @@ public final class AgentGatewayDtos {
       String riskCategory,
       Boolean refined) {}
 
+  public record QaFindingDto(
+      String component, String description, String severity, String source) {}
+
+  public record RiskMatrixEntryDto(
+      String category,
+      boolean applicable,
+      String impact,
+      String likelihood,
+      String priority,
+      String justification) {}
+
+  public record QaRecordDto(
+      String stage,
+      String promptVersion,
+      String resultJson,
+      boolean degraded,
+      int iterations,
+      String traceId) {}
+
+  /** Bloco QA: findings do review, recomendacoes priorizadas, matriz avaliada e registro. */
+  public record QaBlockDto(
+      List<QaFindingDto> findings,
+      List<TestRecommendation> recommendations,
+      List<RiskMatrixEntryDto> riskMatrix,
+      boolean degraded,
+      QaRecordDto record) {}
+
   public record GenerateTestPlanResponse(
-      List<TestRecommendation> recommendations, boolean degraded) {}
+      List<TestRecommendation> recommendations, boolean degraded, QaBlockDto qa) {}
 }

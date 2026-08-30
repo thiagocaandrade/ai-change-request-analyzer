@@ -139,6 +139,35 @@ class AgentClientTest {
                     && e.getError().contains("exhausted_after_3_attempts"));
   }
 
+  @Test
+  void parsesQaBlockFromResponseEnvelope() throws IOException {
+    String body =
+        """
+        {"request_id":"req-5","status":"completed","result":{"risk":"HIGH","confidence":0.9},
+         "qa":{
+           "findings":[{"component":"discount-service","description":"teste ausente","severity":"HIGH","source":"business-rules.md"}],
+           "recommendations":[{"component":"discount-service","description":"cobrir desconto","priority":"HIGH","priorityJustification":"matriz deterministica","riskCategory":"financial_business_rule_regression","refined":true}],
+           "riskMatrix":[{"category":"financial_business_rule_regression","applicable":true,"impact":"HIGH","likelihood":"MEDIUM","priority":"HIGH","justification":"matriz deterministica"}],
+           "degraded":false,
+           "record":{"stage":"CODE_REVIEW","promptVersion":"code-review-v1","resultJson":"{}","degraded":false,"iterations":0,"traceId":"trace-qa"}
+         }}
+        """;
+    HttpServer server = startServer((exchange, count) -> respond(exchange, 200, body));
+    try {
+      AgentClient client = buildClient(server);
+      var response = client.analyze("req-5", "Alterar desconto VIP", "trace-12");
+
+      assertThat(response.qa()).isNotNull();
+      assertThat(response.qa().findings().get(0).component()).isEqualTo("discount-service");
+      assertThat(response.qa().recommendations().get(0).riskCategory())
+          .isEqualTo("financial_business_rule_regression");
+      assertThat(response.qa().record().promptVersion()).isEqualTo("code-review-v1");
+      assertThat(response.qa().riskMatrix().get(0).priority()).isEqualTo("HIGH");
+    } finally {
+      server.stop(0);
+    }
+  }
+
   private AgentClient buildClient(HttpServer server) {
     return new AgentClient(
         RestClient.builder(),

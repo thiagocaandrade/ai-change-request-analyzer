@@ -21,10 +21,10 @@
 
 ## 4. Integração no pipeline de análise, persistência e endpoints
 
-- [ ] 4.1 Orquestrar QA no endpoint `POST /generate-test-plan` do `AgentGatewayController`: RAG → code review → matriz → geração/refinamento → resposta com bloco `qa` (findings + recomendações priorizadas + registro); persistir `QaReviewRecord`/`QaFinding` no gateway via `requestId`; verificar teste MockMvc do endpoint com QA completa e com QA degradada
-- [ ] 4.2 Propagar o bloco `qa` pelo contrato: DTOs `AgentResponse`/`CreateAnalysisRequest` (campo opcional), nó `generate_test_plan` do sidecar Python repassando `qa` ao `final_result` sem lógica nova, e `AnalysisService` persistindo recomendações com justification/riskCategory; verificar `mvn test` + `pytest` verdes e teste de contrato
-- [ ] 4.3 Exibir QA na página de resultado: seção em `templates/result.html` com findings do review e recomendações priorizadas (prioridade + justificativa), indicação explícita de QA degradado e renderização escapada (`th:text`, sem `th:utext`); verificar teste MockMvc: QA completo renderizado, QA degradado sem quebrar a página e conteúdo com `<script>` escapado
-- [ ] 4.4 Registrar trace events e métricas do QA (ex.: `qa_review`, `qa_refinement`) e validar reconstrução por trace_id na página de trace; verificar teste de trace com eventos QA na ordem cronológica
+- [x] 4.1 Orquestrar QA no endpoint `POST /generate-test-plan` do `AgentGatewayController`: RAG → code review → matriz → geração/refinamento → resposta com bloco `qa` (findings + recomendações priorizadas + registro); persistir `QaReviewRecord`/`QaFinding` no gateway via `requestId`; verificar teste MockMvc do endpoint com QA completa e com QA degradada
+- [x] 4.2 Propagar o bloco `qa` pelo contrato: DTOs `AgentResponse`/`CreateAnalysisRequest` (campo opcional), nó `generate_test_plan` do sidecar Python repassando `qa` ao `final_result` sem lógica nova, e `AnalysisService` persistindo recomendações com justification/riskCategory; verificar `mvn test` + `pytest` verdes e teste de contrato
+- [x] 4.3 Exibir QA na página de resultado: seção em `templates/result.html` com findings do review e recomendações priorizadas (prioridade + justificativa), indicação explícita de QA degradado e renderização escapada (`th:text`, sem `th:utext`); verificar teste MockMvc: QA completo renderizado, QA degradado sem quebrar a página e conteúdo com `<script>` escapado
+- [x] 4.4 Registrar trace events e métricas do QA (ex.: `qa_review`, `qa_refinement`) e validar reconstrução por trace_id na página de trace; verificar teste de trace com eventos QA na ordem cronológica
 
 ## 5. Testes E2E dos cenários + evidência 09-ai-code-review.png
 

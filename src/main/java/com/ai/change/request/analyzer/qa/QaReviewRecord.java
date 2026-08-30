@@ -57,7 +57,11 @@ public class QaReviewRecord {
   @Column(nullable = false)
   private Instant createdAt;
 
-  @OneToMany(mappedBy = "reviewRecord", cascade = CascadeType.ALL, orphanRemoval = true)
+  @OneToMany(
+      mappedBy = "reviewRecord",
+      cascade = CascadeType.ALL,
+      orphanRemoval = true,
+      fetch = FetchType.EAGER)
   private List<QaFinding> findings = new ArrayList<>();
 
   protected QaReviewRecord() {}

@@ -124,6 +124,102 @@ class AgentResultMapperTest {
   }
 
   @Test
+  void mapsQaRecommendationsWithJustificationAndCategoryIntoAnalysis() {
+    ChangeAnalysis analysis =
+        mapper.toAnalysis(
+            request(),
+            Map.of(
+                "risk", "HIGH",
+                "confidence", 0.9,
+                "rationale", "regra financeira",
+                "qa",
+                    Map.of(
+                        "degraded", false,
+                        "recommendations",
+                            List.of(
+                                Map.of(
+                                    "component", "discount-service",
+                                    "description", "cobrir desconto VIP",
+                                    "priority", "HIGH",
+                                    "priorityJustification", "matriz deterministica",
+                                    "riskCategory", "financial_business_rule_regression",
+                                    "refined", true)))));
+
+    assertThat(analysis.getRecommendations()).hasSize(1);
+    var recommendation = analysis.getRecommendations().get(0);
+    assertThat(recommendation.getPriorityJustification()).isEqualTo("matriz deterministica");
+    assertThat(recommendation.getRiskCategory())
+        .isEqualTo("financial_business_rule_regression");
+    assertThat(recommendation.getRefined()).isTrue();
+  }
+
+  @Test
+  void mapsPlainTestPlanWhenQaBlockAbsent() {
+    ChangeAnalysis analysis =
+        mapper.toAnalysis(
+            request(),
+            Map.of(
+                "risk", "MEDIUM",
+                "confidence", 0.5,
+                "test_plan",
+                    List.of(
+                        Map.of(
+                            "component", "unit",
+                            "description", "teste unitario",
+                            "priority", "MEDIUM"))));
+
+    assertThat(analysis.getRecommendations()).hasSize(1);
+    assertThat(analysis.getRecommendations().get(0).getPriorityJustification()).isNull();
+  }
+
+  @Test
+  void mapsQaBlockToTypedDto() {
+    var qa =
+        mapper.toQa(
+            Map.of(
+                "qa",
+                Map.of(
+                    "degraded", false,
+                    "findings",
+                        List.of(
+                            Map.of(
+                                "component", "discount-service",
+                                "description", "teste de regressao ausente",
+                                "severity", "HIGH",
+                                "source", "business-rules.md")),
+                    "riskMatrix",
+                        List.of(
+                            Map.of(
+                                "category", "financial_business_rule_regression",
+                                "applicable", true,
+                                "impact", "HIGH",
+                                "likelihood", "MEDIUM",
+                                "priority", "HIGH",
+                                "justification", "matriz deterministica")),
+                    "record",
+                        Map.of(
+                            "stage", "CODE_REVIEW",
+                            "promptVersion", "code-review-v1",
+                            "resultJson", "{}",
+                            "degraded", false,
+                            "iterations", 0,
+                            "traceId", "trace-qa"))));
+
+    assertThat(qa).isNotNull();
+    assertThat(qa.findings()).hasSize(1);
+    assertThat(qa.findings().get(0).source()).isEqualTo("business-rules.md");
+    assertThat(qa.riskMatrix().get(0).priority()).isEqualTo("HIGH");
+    assertThat(qa.record().stage()).isEqualTo("CODE_REVIEW");
+  }
+
+  @Test
+  void mapsResultWithoutQaBlockToNull() {
+    assertThat(mapper.toQa(Map.of("risk", "HIGH"))).isNull();
+    assertThat(mapper.toQa(Map.of("qa", Map.of()))).isNotNull();
+    assertThat(mapper.toQa(null)).isNull();
+  }
+
+  @Test
   void malformedSecurityEventsAreDiscarded() {
     List<SecurityEvent> events =
         mapper.toSecurityEvents(

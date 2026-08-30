@@ -74,6 +74,7 @@ def to_response(state):
         "request_id": change_request.get("request_id"),
         "status": state.get("status"),
         "result": result,
+        "qa": final_result.get("qa"),
     }
 
 

@@ -7,11 +7,11 @@ import com.ai.change.request.analyzer.ai.dto.AiResults.ImpactAnalysisResult;
 import com.ai.change.request.analyzer.ai.dto.AiResults.ImpactFindingDto;
 import com.ai.change.request.analyzer.ai.dto.AiResults.RiskAnalysisResult;
 import com.ai.change.request.analyzer.ai.dto.AiResults.SecurityAnalysisResult;
-import com.ai.change.request.analyzer.ai.dto.AiResults.TestPlanResult;
-import com.ai.change.request.analyzer.ai.dto.AiResults.TestRecommendationDto;
 import com.ai.change.request.analyzer.domain.ChangeRequestRepository;
 import com.ai.change.request.analyzer.memory.AnalysisMemoryService;
 import com.ai.change.request.analyzer.observability.TraceService;
+import com.ai.change.request.analyzer.qa.QaRecordService;
+import com.ai.change.request.analyzer.qa.QaService;
 import com.ai.change.request.analyzer.rag.RagService;
 import com.ai.change.request.analyzer.security.SecurityAssessmentService;
 import com.ai.change.request.analyzer.security.SecurityAssessmentService.SecurityEvent;
@@ -28,8 +28,12 @@ import com.ai.change.request.analyzer.web.AgentGatewayDtos.GenerateTestPlanRespo
 import com.ai.change.request.analyzer.web.AgentGatewayDtos.HistoryHit;
 import com.ai.change.request.analyzer.web.AgentGatewayDtos.ImpactFinding;
 import com.ai.change.request.analyzer.web.AgentGatewayDtos.KnowledgeHit;
+import com.ai.change.request.analyzer.web.AgentGatewayDtos.QaBlockDto;
+import com.ai.change.request.analyzer.web.AgentGatewayDtos.QaFindingDto;
+import com.ai.change.request.analyzer.web.AgentGatewayDtos.QaRecordDto;
 import com.ai.change.request.analyzer.web.AgentGatewayDtos.RetrieveHistoryResponse;
 import com.ai.change.request.analyzer.web.AgentGatewayDtos.RetrieveKnowledgeResponse;
+import com.ai.change.request.analyzer.web.AgentGatewayDtos.RiskMatrixEntryDto;
 import com.ai.change.request.analyzer.web.AgentGatewayDtos.SecurityAssessmentDto;
 import com.ai.change.request.analyzer.web.AgentGatewayDtos.SecurityAssessmentRequest;
 import com.ai.change.request.analyzer.web.AgentGatewayDtos.SecurityEventDto;
@@ -68,6 +72,8 @@ public class AgentGatewayController {
   private final SecurityAssessmentService securityAssessmentService;
   private final ChangeRequestRepository changeRequestRepository;
   private final TraceService traceService;
+  private final QaService qaService;
+  private final QaRecordService qaRecordService;
 
   public AgentGatewayController(
       AiAnalysisService aiAnalysisService,
@@ -77,7 +83,9 @@ public class AgentGatewayController {
       EvidenceRenderer evidenceRenderer,
       SecurityAssessmentService securityAssessmentService,
       ChangeRequestRepository changeRequestRepository,
-      TraceService traceService) {
+      TraceService traceService,
+      QaService qaService,
+      QaRecordService qaRecordService) {
     this.aiAnalysisService = aiAnalysisService;
     this.codeEvidenceService = codeEvidenceService;
     this.ragService = ragService;
@@ -86,6 +94,8 @@ public class AgentGatewayController {
     this.securityAssessmentService = securityAssessmentService;
     this.changeRequestRepository = changeRequestRepository;
     this.traceService = traceService;
+    this.qaService = qaService;
+    this.qaRecordService = qaRecordService;
   }
 
   @PostMapping("/classify")
@@ -214,22 +224,48 @@ public class AgentGatewayController {
         result.level(), result.confidence(), result.rationale(), result.degraded());
   }
 
+  /**
+   * Orquestra a etapa QA dentro do estagio de geracao de testes: RAG → code review → matriz de
+   * risco deterministica → geracao/refinamento → resposta com bloco {@code qa} (findings +
+   * recomendacoes priorizadas + registro). Registros QA persistidos no gateway via requestId;
+   * conteudo recuperado e varrido em busca de instrucoes injetadas.
+   */
   @PostMapping("/generate-test-plan")
   public GenerateTestPlanResponse generateTestPlan(
       @Valid @RequestBody GenerateTestPlanRequest body) {
     long start = System.nanoTime();
     traceService.record("generate-test-plan", "started");
-    String evidence =
-        evidenceRenderer.renderSections(
-            Map.of(
-                "RISCO", listOrEmpty(body.risk()),
-                "CLASSIFICACAO", listOrEmpty(body.classification()),
-                "IMPACTO", listOrEmpty(body.impactFindings())));
-    TestPlanResult result = aiAnalysisService.generateTestPlan(body.changeText(), evidence);
+    QaService.QaOutcome outcome =
+        qaService.generateTestPlanWithQa(
+            body.changeText(),
+            body.diff(),
+            body.risk(),
+            body.classification(),
+            body.impactFindings());
+    scanAndPersist(
+        body.requestId(),
+        outcome.documents().stream()
+            .map(document -> String.valueOf(document.get("content")))
+            .toList(),
+        SecurityAssessmentService.SOURCE_KNOWLEDGE);
+    qaRecordService.persistOutcome(body.requestId(), outcome);
     List<TestRecommendation> recommendations =
-        result.recommendations().stream().map(this::toRecommendation).toList();
-    recordCompleted("generate-test-plan", start, result.degraded());
-    return new GenerateTestPlanResponse(recommendations, result.degraded());
+        outcome.recommendations().stream().map(this::toRecommendation).toList();
+    QaBlockDto qa =
+        new QaBlockDto(
+            outcome.review().findings().stream().map(this::toQaFinding).toList(),
+            recommendations,
+            outcome.matrix().stream().map(this::toMatrixEntry).toList(),
+            outcome.degraded(),
+            new QaRecordDto(
+                QaRecordService.STAGE_CODE_REVIEW,
+                QaRecordService.PROMPT_CODE_REVIEW,
+                outcome.reviewResultJson(),
+                outcome.degraded(),
+                0,
+                MDC.get("trace_id")));
+    recordCompleted("generate-test-plan", start, outcome.degraded());
+    return new GenerateTestPlanResponse(recommendations, outcome.degraded(), qa);
   }
 
   private void scanAndPersist(String requestId, List<String> contents, String source) {
@@ -272,8 +308,30 @@ public class AgentGatewayController {
     return new ImpactFinding(dto.component(), dto.description(), dto.severity());
   }
 
-  private TestRecommendation toRecommendation(TestRecommendationDto dto) {
-    return new TestRecommendation(dto.component(), dto.description(), dto.priority(), null, null, null);
+  private TestRecommendation toRecommendation(QaService.QaRecommendation recommendation) {
+    return new TestRecommendation(
+        recommendation.component(),
+        recommendation.description(),
+        recommendation.priority(),
+        recommendation.priorityJustification(),
+        recommendation.riskCategory(),
+        recommendation.refined());
+  }
+
+  private QaFindingDto toQaFinding(com.ai.change.request.analyzer.ai.dto.AiResults.CodeReviewFindingDto finding) {
+    return new QaFindingDto(
+        finding.component(), finding.description(), finding.severity(), finding.source());
+  }
+
+  private RiskMatrixEntryDto toMatrixEntry(
+      com.ai.change.request.analyzer.qa.RiskMatrixService.RiskCategoryAssessment assessment) {
+    return new RiskMatrixEntryDto(
+        assessment.category(),
+        assessment.applicable(),
+        assessment.impact() == null ? null : assessment.impact().name(),
+        assessment.likelihood() == null ? null : assessment.likelihood().name(),
+        assessment.priority() == null ? null : assessment.priority().name(),
+        assessment.justification());
   }
 
   @SuppressWarnings("unchecked")

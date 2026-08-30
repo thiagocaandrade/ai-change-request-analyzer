@@ -10,6 +10,8 @@ import com.ai.change.request.analyzer.domain.ChangeRequestRepository;
 import com.ai.change.request.analyzer.domain.ChangeRequestStatus;
 import com.ai.change.request.analyzer.domain.RiskAssessment;
 import com.ai.change.request.analyzer.observability.TraceService;
+import com.ai.change.request.analyzer.qa.QaReviewRecord;
+import com.ai.change.request.analyzer.qa.QaReviewRecordRepository;
 import com.ai.change.request.analyzer.service.AgentResultMapper;
 import com.ai.change.request.analyzer.service.AnalysisService;
 import com.ai.change.request.analyzer.service.ApprovalService;
@@ -42,6 +44,7 @@ public class ChangeRequestController {
   private final AnalysisService analysisService;
   private final ApprovalService approvalService;
   private final TraceService traceService;
+  private final QaReviewRecordRepository qaReviewRecordRepository;
 
   public ChangeRequestController(
       ChangeRequestRepository repository,
@@ -49,13 +52,15 @@ public class ChangeRequestController {
       AgentResultMapper agentResultMapper,
       AnalysisService analysisService,
       ApprovalService approvalService,
-      TraceService traceService) {
+      TraceService traceService,
+      QaReviewRecordRepository qaReviewRecordRepository) {
     this.repository = repository;
     this.agentClient = agentClient;
     this.agentResultMapper = agentResultMapper;
     this.analysisService = analysisService;
     this.approvalService = approvalService;
     this.traceService = traceService;
+    this.qaReviewRecordRepository = qaReviewRecordRepository;
   }
 
   @PostMapping
@@ -74,7 +79,10 @@ public class ChangeRequestController {
       var agentResponse = agentClient.analyze(request.getId().toString(), body.text(), traceId);
       ChangeAnalysis analysis = agentResultMapper.toAnalysis(request, agentResponse.result());
       analysisService.persistAnalysis(
-          request, analysis, agentResultMapper.toSecurityEvents(agentResponse.result()));
+          request,
+          analysis,
+          agentResultMapper.toSecurityEvents(agentResponse.result()),
+          agentResultMapper.toQa(agentResponse.result()));
       request.setStatus(ChangeRequestStatus.COMPLETED);
       traceService.record(
           "pipeline",
@@ -176,7 +184,40 @@ public class ChangeRequestController {
             .toList(),
         approval != null ? approval.isRequired() : null,
         approval != null ? approval.getStatus() : null,
-        new AgentGatewayDtos.SecurityAssessmentDto(!securityEvents.isEmpty(), securityEvents));
+        new AgentGatewayDtos.SecurityAssessmentDto(!securityEvents.isEmpty(), securityEvents),
+        toQaView(qaReviewRecordRepository.findByChangeRequestIdOrderByCreatedAtAsc(id)));
+  }
+
+  private AnalysisResponse.QaView toQaView(List<QaReviewRecord> records) {
+    if (records.isEmpty()) {
+      return null;
+    }
+    List<AgentGatewayDtos.QaFindingDto> findings =
+        records.stream()
+            .filter(record -> record.getStage().equals("CODE_REVIEW"))
+            .flatMap(record -> record.getFindings().stream())
+            .map(
+                finding ->
+                    new AgentGatewayDtos.QaFindingDto(
+                        finding.getComponent(),
+                        finding.getDescription(),
+                        finding.getSeverity(),
+                        finding.getSource()))
+            .toList();
+    List<AgentGatewayDtos.QaRecordDto> recordDtos =
+        records.stream()
+            .map(
+                record ->
+                    new AgentGatewayDtos.QaRecordDto(
+                        record.getStage(),
+                        record.getPromptVersion(),
+                        record.getResultJson(),
+                        record.isDegraded(),
+                        record.getIterations(),
+                        record.getTraceId()))
+            .toList();
+    boolean degraded = records.stream().anyMatch(QaReviewRecord::isDegraded);
+    return new AnalysisResponse.QaView(findings, recordDtos, degraded);
   }
 
   private ChangeRequest loadRequest(UUID id) {

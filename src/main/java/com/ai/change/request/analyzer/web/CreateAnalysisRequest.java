@@ -1,6 +1,7 @@
 package com.ai.change.request.analyzer.web;
 
 import com.ai.change.request.analyzer.domain.RiskLevel;
+import com.ai.change.request.analyzer.web.AgentGatewayDtos.QaBlockDto;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -10,7 +11,15 @@ import java.util.List;
 public record CreateAnalysisRequest(
     @NotNull List<@Valid FindingDto> findings,
     @NotNull @Valid RiskDto riskAssessment,
-    @NotNull List<@Valid RecommendationDto> testRecommendations) {
+    @NotNull List<@Valid RecommendationDto> testRecommendations,
+    @Valid QaBlockDto qa) {
+
+  public CreateAnalysisRequest(
+      List<FindingDto> findings,
+      RiskDto riskAssessment,
+      List<RecommendationDto> testRecommendations) {
+    this(findings, riskAssessment, testRecommendations, null);
+  }
 
   public record FindingDto(
       @NotBlank @Size(max = 200) String component,
