@@ -1,16 +1,20 @@
 package com.ai.change.request.analyzer.domain;
 
+import com.ai.change.request.analyzer.security.SecurityAssessment;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.Id;
+import jakarta.persistence.OneToMany;
 import jakarta.persistence.OneToOne;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 
 @Entity
@@ -37,6 +41,9 @@ public class ChangeRequest {
 
   @OneToOne(mappedBy = "changeRequest", cascade = CascadeType.ALL, orphanRemoval = true)
   private Approval approval;
+
+  @OneToMany(mappedBy = "changeRequest", cascade = CascadeType.ALL, orphanRemoval = true)
+  private List<SecurityAssessment> securityAssessments = new ArrayList<>();
 
   @Column(nullable = false)
   private Instant createdAt;
@@ -115,6 +122,15 @@ public class ChangeRequest {
     if (approval != null) {
       approval.setChangeRequest(this);
     }
+  }
+
+  public List<SecurityAssessment> getSecurityAssessments() {
+    return securityAssessments;
+  }
+
+  public void addSecurityAssessment(SecurityAssessment assessment) {
+    securityAssessments.add(assessment);
+    assessment.setChangeRequest(this);
   }
 
   public Instant getCreatedAt() {
