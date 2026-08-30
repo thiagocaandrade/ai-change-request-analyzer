@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="pt-BR" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Change Request Analyzer</title>
+    <link rel="stylesheet" th:href="@{/css/app.css}">
+</head>
+<body>
+<header class="app-header">
+    <h1>AI Change Request Analyzer</h1>
+    <nav>
+        <a th:href="@{/}">Nova solicitação</a>
+    </nav>
+</header>
+<main class="app-main">
+    <p class="error" th:if="${error}" th:text="${error}"></p>
+    <section class="card">
+        <h2>Nova solicitação de alteração</h2>
+        <p>Descreva a alteração desejada no software. A aplicação analisa impacto, risco e testes recomendados.</p>
+        <form th:action="@{/change-requests}" th:object="${form}" method="post">
+            <label for="text">Solicitação</label>
+            <textarea id="text" name="text" rows="5"
+                      th:field="*{text}"
+                      placeholder="Ex.: Alterar o desconto de clientes VIP de 10% para 15%."></textarea>
+            <p class="error" th:if="${#fields.hasErrors('text')}" th:errors="*{text}"></p>
+            <button type="submit">Analisar solicitação</button>
+        </form>
+    </section>
+    <section class="card">
+        <h2>Consultar execução (trace)</h2>
+        <p>Reconstrua uma execução anterior pelo trace_id.</p>
+        <form th:action="@{/traces}" method="post">
+            <label for="traceId">trace_id</label>
+            <input type="text" id="traceId" name="traceId"
+                   placeholder="Ex.: 550e8400-e29b-41d4-a716-446655440000">
+            <button type="submit" class="button-secondary">Ver trace</button>
+        </form>
+    </section>
+</main>
+</body>
+</html>
