@@ -3,6 +3,7 @@ package com.ai.change.request.analyzer.ai;
 import com.ai.change.request.analyzer.ai.dto.AiResults.ClassificationResult;
 import com.ai.change.request.analyzer.ai.dto.AiResults.ImpactAnalysisResult;
 import com.ai.change.request.analyzer.ai.dto.AiResults.RiskAnalysisResult;
+import com.ai.change.request.analyzer.ai.dto.AiResults.SecurityAnalysisResult;
 import com.ai.change.request.analyzer.ai.dto.AiResults.TestPlanResult;
 import com.ai.change.request.analyzer.ai.dto.AiResults.TestRecommendationDto;
 import jakarta.validation.Validator;
@@ -90,6 +91,21 @@ public class AiAnalysisService {
             () -> new TestPlanResult(defaultFallbackPlan(), true)));
   }
 
+  /**
+   * Etapa assistida de analise de seguranca: a saida do modelo e apenas SUGESTAO validada; a
+   * decisao final de deteccao, o registro do evento e a acao sao aplicados deterministicamente pela
+   * aplicacao. A sugestao nunca altera risco ou classificacao.
+   */
+  public SecurityAnalysisResult analyzeSecurity(String changeText, String evidence) {
+    return normalizeSecurity(
+        generate(
+            AnalysisStage.SECURITY_ANALYSIS,
+            changeText,
+            evidence,
+            SecurityAnalysisResult.class,
+            () -> new SecurityAnalysisResult(List.of(), true)));
+  }
+
   private static ClassificationResult normalizeClassification(ClassificationResult result) {
     return new ClassificationResult(
         result.category(), result.notes(), Boolean.TRUE.equals(result.degraded()));
@@ -109,6 +125,10 @@ public class AiAnalysisService {
 
   private static TestPlanResult normalizePlan(TestPlanResult result) {
     return new TestPlanResult(result.recommendations(), Boolean.TRUE.equals(result.degraded()));
+  }
+
+  private static SecurityAnalysisResult normalizeSecurity(SecurityAnalysisResult result) {
+    return new SecurityAnalysisResult(result.findings(), Boolean.TRUE.equals(result.degraded()));
   }
 
   private <T> T generate(

@@ -42,4 +42,10 @@ public final class AiResults {
 
   public record TestPlanResult(
       @NotNull @NotEmpty List<@Valid TestRecommendationDto> recommendations, Boolean degraded) {}
+
+  public record SecurityFindingDto(
+      @NotBlank @Size(max = 32) String type, @NotBlank @Size(max = 1000) String evidence) {}
+
+  public record SecurityAnalysisResult(
+      @NotNull List<@Valid SecurityFindingDto> findings, Boolean degraded) {}
 }
