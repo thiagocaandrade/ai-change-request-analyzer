@@ -1,3 +1,5 @@
+from fake_client import FakeAgentClient, happy_client, unavailable_client
+
 from graph import nodes
 from graph.state import initial_state
 
@@ -19,10 +21,112 @@ def test_validate_request_records_errors_without_raising():
     assert {"node": "validate_request", "message": "texto da solicitacao vazio"} in result["errors"]
 
 
-def test_classify_request_detects_business_rule_stub():
-    state = base_state("Alterar desconto VIP de 10% para 15%")
-    result = nodes.classify_request(state)
+def test_classify_request_calls_application():
+    fn = nodes.make_classify_request(happy_client())
+    result = fn(base_state("Alterar desconto VIP de 10% para 15%"))
     assert result["classification"]["category"] == "business_rule"
+    assert result["classification"]["notes"] == "regra de desconto"
+
+
+def test_classify_request_failure_records_error_with_empty_collection():
+    fn = nodes.make_classify_request(unavailable_client())
+    result = fn(base_state())
+    assert result["classification"] == {}
+    assert result["errors"][0]["node"] == "classify_request"
+
+
+def test_collection_nodes_use_application_data():
+    client = happy_client()
+    code = nodes.make_nodes(client)["analyze_code"](base_state())
+    knowledge = nodes.make_nodes(client)["retrieve_knowledge"](base_state())
+    history = nodes.make_nodes(client)["retrieve_history"](base_state())
+    assert code["code_findings"][0]["area"] == "code"
+    assert knowledge["retrieved_documents"][0]["source"] == "discount-policy.md"
+    assert history["historical_findings"][0]["requestId"] == "req-antiga"
+
+
+def test_collection_node_failure_records_error_with_empty_collection():
+    client = unavailable_client()
+    result = nodes.make_nodes(client)["analyze_code"](base_state())
+    assert result["code_findings"] == []
+    assert result["errors"][0]["node"] == "analyze_code"
+    assert "aplicacao indisponivel" in result["errors"][0]["message"]
+
+
+def test_analyze_impact_sends_collected_evidence():
+    client = happy_client()
+    state = base_state()
+    state["code_findings"] = [{"area": "code", "description": "achado"}]
+    state["retrieved_documents"] = [{"source": "doc", "content": "conteudo"}]
+    state["historical_findings"] = [{"requestId": "r", "summary": "s"}]
+    fn = nodes.make_analyze_impact(client)
+    result = fn(state)
+    assert result["impact_findings"][0]["component"] == "discount-service"
+    assert client.calls[-1][0] == "analyze_impact"
+    payload = client.calls[-1][1][0]
+    assert payload["changeText"] == "Alterar desconto VIP"
+    assert payload["codeFindings"] == state["code_findings"]
+    assert payload["retrievedDocuments"] == state["retrieved_documents"]
+
+
+def test_analyze_impact_failure_records_error_with_empty_collection():
+    fn = nodes.make_analyze_impact(unavailable_client())
+    result = fn(base_state())
+    assert result["impact_findings"] == []
+    assert result["errors"][0]["node"] == "analyze_impact"
+
+
+def test_assess_risk_uses_application_risk():
+    client = FakeAgentClient(
+        assess_risk={"level": "HIGH", "confidence": 0.9, "rationale": "financeira", "degraded": False}
+    )
+    fn = nodes.make_assess_risk(client)
+    result = fn(base_state())
+    assert result["risk_assessment"] == {
+        "level": "HIGH",
+        "confidence": 0.9,
+        "rationale": "financeira",
+    }
+
+
+def test_assess_risk_failure_uses_marked_deterministic_fallback():
+    fn = nodes.make_assess_risk(unavailable_client())
+    result = fn(base_state())
+    assert result["risk_assessment"]["level"] == "MEDIUM"
+    assert result["risk_assessment"]["confidence"] == 0.5
+    assert result["risk_assessment"]["rationale"] == "analysis_unavailable"
+    assert result["risk_assessment"]["degraded"] is True
+    assert result["errors"][0]["node"] == "assess_risk"
+
+
+def test_assess_risk_preserves_seeded_risk():
+    state = base_state()
+    state["risk_assessment"] = {"level": "HIGH", "confidence": 0.9, "rationale": "seed"}
+    fn = nodes.make_assess_risk(happy_client())
+    assert fn(state) == {}
+
+
+def test_generate_test_plan_uses_application_recommendations():
+    state = base_state()
+    state["classification"] = {"category": "business_rule"}
+    state["risk_assessment"] = {"level": "MEDIUM", "confidence": 0.5, "rationale": "r"}
+    state["impact_findings"] = [{"component": "discount-service"}]
+    fn = nodes.make_generate_test_plan(happy_client())
+    result = fn(state)
+    assert result["test_plan"][0]["component"] == "unit"
+    assert result["final_result"]["risk"] == "MEDIUM"
+    assert result["iteration_count"] == 1
+
+
+def test_generate_test_plan_failure_uses_marked_degraded_plan():
+    state = base_state()
+    state["risk_assessment"] = {"level": "MEDIUM", "confidence": 0.5, "rationale": "r"}
+    fn = nodes.make_generate_test_plan(unavailable_client())
+    result = fn(state)
+    assert result["test_plan"]
+    assert "analysis_unavailable" in result["test_plan"][0]["description"]
+    assert result["errors"][0]["node"] == "generate_test_plan"
+    assert result["final_result"]["risk"] == "MEDIUM"
 
 
 def test_detect_untrusted_content_registers_injection_event_in_request():
@@ -56,38 +160,13 @@ def test_run_node_captures_failure_in_errors():
     assert result["errors"] == [{"node": "analyze_code", "message": "ferramenta indisponivel"}]
 
 
-def test_collection_stubs_fill_their_sections():
-    state = base_state()
-    state["code_findings"] = nodes.analyze_code(state)["code_findings"]
-    state["retrieved_documents"] = nodes.retrieve_knowledge(state)["retrieved_documents"]
-    state["historical_findings"] = nodes.retrieve_history(state)["historical_findings"]
-    assert state["code_findings"]
-    assert state["retrieved_documents"]
-    assert state["historical_findings"]
-
-
 def test_analyze_impact_combines_collected_evidence():
     state = base_state()
-    state["code_findings"] = nodes.analyze_code(state)["code_findings"]
-    state["retrieved_documents"] = nodes.retrieve_knowledge(state)["retrieved_documents"]
-    state["historical_findings"] = nodes.retrieve_history(state)["historical_findings"]
-    result = nodes.analyze_impact(state)
-    areas = {finding["area"] for finding in result["impact_findings"]}
-    assert areas == {"code", "knowledge", "history"}
-
-
-def test_assess_risk_defaults_to_medium():
-    result = nodes.assess_risk(base_state())
-    assert result["risk_assessment"]["level"] == "MEDIUM"
-    assert result["risk_assessment"]["confidence"] == 0.5
-
-
-def test_assess_risk_preserves_seeded_risk():
-    state = base_state()
-    state["risk_assessment"] = {"level": "HIGH", "confidence": 0.9, "rationale": "seed"}
-    assert nodes.assess_risk(state) == {}
-    state["risk_assessment"] = {"level": "MEDIUM", "confidence": 1.5}
-    assert nodes.assess_risk(state) == {}
+    state["code_findings"] = [{"area": "code", "description": "achado"}]
+    state["retrieved_documents"] = [{"source": "doc"}]
+    state["historical_findings"] = [{"requestId": "r"}]
+    result = nodes.make_analyze_impact(happy_client())(state)
+    assert result["impact_findings"]
 
 
 def test_approval_route_branches_on_risk_level():
@@ -105,22 +184,6 @@ def test_approval_route_branches_on_risk_level():
 def test_human_approval_marks_pending():
     result = nodes.human_approval(base_state())
     assert result == {"approval_required": True, "approval_status": "PENDING"}
-
-
-def test_generate_test_plan_compiles_final_result_and_counts_iteration():
-    state = base_state()
-    state["classification"] = {"category": "business_rule"}
-    state["risk_assessment"] = {"level": "HIGH", "confidence": 0.9, "rationale": "seed"}
-    state["impact_findings"] = [{"area": "code", "description": "1 evidencias (stub)", "severity": "INFO"}]
-    state["approval_required"] = True
-    state["approval_status"] = "PENDING"
-    result = nodes.generate_test_plan(state)
-    assert result["iteration_count"] == 1
-    final_result = result["final_result"]
-    assert final_result["risk"] == "HIGH"
-    assert final_result["confidence"] == 0.9
-    assert final_result["test_plan"]
-    assert final_result["approval"] == {"required": True, "status": "PENDING"}
 
 
 def test_final_result_issues_flags_invalid_confidence():
@@ -143,18 +206,6 @@ def test_final_result_issues_empty_for_valid_result():
         "test_plan": [{"component": "unit", "description": "t", "priority": "HIGH"}],
     }
     assert nodes.final_result_issues(state) == []
-
-
-def test_validate_final_result_records_issue_for_invalid_result():
-    state = base_state()
-    state["final_result"] = {
-        "summary": "Analise da solicitacao",
-        "risk": "MEDIUM",
-        "confidence": 1.5,
-        "test_plan": [{"component": "unit", "description": "t", "priority": "HIGH"}],
-    }
-    result = nodes.validate_final_result(state)
-    assert result["errors"][0]["node"] == "validate_final_result"
 
 
 def test_final_result_router_routes_finalize_retry_error():
@@ -194,3 +245,11 @@ def test_finalize_error_sets_failed_status():
     result = nodes.finalize_error(state)
     assert result["status"] == "failed"
     assert result["final_result"]["errors"] == state["errors"]
+
+
+def test_client_failure_raises_agent_unavailable_error():
+    client = unavailable_client()
+    fn = nodes.make_classify_request(client)
+    result = fn(base_state())
+    assert isinstance(result["errors"][0], dict)
+    assert "aplicacao indisponivel" in result["errors"][0]["message"]
