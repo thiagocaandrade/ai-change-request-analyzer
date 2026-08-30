@@ -6,7 +6,8 @@ public enum AnalysisStage {
   IMPACT_ANALYSIS("impact-analysis"),
   RISK_ANALYSIS("risk-analysis"),
   TEST_GENERATION("test-generation"),
-  SECURITY_ANALYSIS("security-analysis");
+  SECURITY_ANALYSIS("security-analysis"),
+  CODE_REVIEW("code-review");
 
   private final String id;
 

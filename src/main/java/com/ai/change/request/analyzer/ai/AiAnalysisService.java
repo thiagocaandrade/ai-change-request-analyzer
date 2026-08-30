@@ -1,6 +1,7 @@
 package com.ai.change.request.analyzer.ai;
 
 import com.ai.change.request.analyzer.ai.dto.AiResults.ClassificationResult;
+import com.ai.change.request.analyzer.ai.dto.AiResults.CodeReviewResult;
 import com.ai.change.request.analyzer.ai.dto.AiResults.ImpactAnalysisResult;
 import com.ai.change.request.analyzer.ai.dto.AiResults.RiskAnalysisResult;
 import com.ai.change.request.analyzer.ai.dto.AiResults.SecurityAnalysisResult;
@@ -117,6 +118,21 @@ public class AiAnalysisService {
             () -> new SecurityAnalysisResult(List.of(), true)));
   }
 
+  /**
+   * Revisao de codigo assistida (etapa QA): a saida e apenas recomendacao estruturada; nenhuma
+   * alteracao de repositorio e aplicada. Sem modelo configurado, retorna fallback determinístico
+   * marcado (sem findings gerados por modelo).
+   */
+  public CodeReviewResult reviewCode(String changeText, String evidence) {
+    return normalizeReview(
+        generate(
+            AnalysisStage.CODE_REVIEW,
+            changeText,
+            evidence,
+            CodeReviewResult.class,
+            () -> new CodeReviewResult(List.of(), List.of(), true)));
+  }
+
   private static ClassificationResult normalizeClassification(ClassificationResult result) {
     return new ClassificationResult(
         result.category(), result.notes(), Boolean.TRUE.equals(result.degraded()));
@@ -140,6 +156,13 @@ public class AiAnalysisService {
 
   private static SecurityAnalysisResult normalizeSecurity(SecurityAnalysisResult result) {
     return new SecurityAnalysisResult(result.findings(), Boolean.TRUE.equals(result.degraded()));
+  }
+
+  private static CodeReviewResult normalizeReview(CodeReviewResult result) {
+    return new CodeReviewResult(
+        result.findings() == null ? List.of() : result.findings(),
+        result.riskCategories() == null ? List.of() : result.riskCategories(),
+        Boolean.TRUE.equals(result.degraded()));
   }
 
   private <T> T generate(

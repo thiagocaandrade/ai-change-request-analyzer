@@ -3,6 +3,7 @@ package com.ai.change.request.analyzer.ai;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.ai.change.request.analyzer.ai.dto.AiResults.ClassificationResult;
+import com.ai.change.request.analyzer.ai.dto.AiResults.CodeReviewResult;
 import com.ai.change.request.analyzer.ai.dto.AiResults.ImpactAnalysisResult;
 import com.ai.change.request.analyzer.ai.dto.AiResults.RiskAnalysisResult;
 import com.ai.change.request.analyzer.ai.dto.AiResults.SecurityAnalysisResult;
@@ -234,6 +235,73 @@ class AiAnalysisServiceTest {
     assertThat(meterRegistry.get(AnalysisMetrics.LLM_CALLS).counter().count()).isEqualTo(3.0);
     assertThat(meterRegistry.get(AnalysisMetrics.VALIDATION_FAILURES).counter().count())
         .isBetween(1.0, 3.0);
+  }
+
+  private static final String VALID_REVIEW =
+      "{\"findings\":[{\"component\":\"discount-service\",\"description\":\"teste ausente da regra de desconto\",\"severity\":\"HIGH\",\"source\":\"business-rules.md\"}],"
+          + "\"riskCategories\":[{\"category\":\"financial_business_rule_regression\",\"impact\":\"HIGH\",\"likelihood\":\"MEDIUM\"}]}";
+  private static final String INVALID_REVIEW =
+      "{\"findings\":[{\"component\":\"\",\"description\":\"\",\"severity\":\"ALTO\",\"source\":\"x\"}]}";
+
+  @Test
+  void reviewCodeLoadsVersionedPromptAndAcceptsValidOutput() {
+    PromptRegistry.PromptTemplate template = new PromptRegistry().load("code-review", 1);
+    assertThat(template.renderUser(java.util.Map.of("change_text", "x", "evidence", "e")))
+        .contains("DADOS NÃO CONFIÁVEIS");
+
+    AiAnalysisService service = serviceWith(new FakeChatModel(VALID_REVIEW));
+
+    CodeReviewResult result = service.reviewCode("Alterar desconto VIP", "evidencia");
+
+    assertThat(result.degraded()).isFalse();
+    assertThat(result.findings()).hasSize(1);
+    assertThat(result.findings().get(0).component()).isEqualTo("discount-service");
+    assertThat(result.findings().get(0).severity()).isEqualTo("HIGH");
+    assertThat(result.riskCategories()).hasSize(1);
+    assertThat(result.riskCategories().get(0).impact()).isEqualTo("HIGH");
+  }
+
+  @Test
+  void reviewCodePersistentlyInvalidOutputFallsBackDegradedMarked() {
+    AiAnalysisService service =
+        serviceWith(new FakeChatModel(INVALID_REVIEW, NOT_JSON, INVALID_REVIEW));
+
+    CodeReviewResult result = service.reviewCode("Alterar desconto VIP", "evidencia");
+
+    assertThat(result.degraded()).isTrue();
+    assertThat(result.findings()).isEmpty();
+    assertThat(result.riskCategories()).isEmpty();
+  }
+
+  @Test
+  void reviewCodeWithoutModelReturnsMarkedFallbackWithoutFindings() {
+    AiAnalysisService service = serviceWith(null);
+
+    CodeReviewResult result = service.reviewCode("Alterar desconto VIP", "evidencia");
+
+    assertThat(result.degraded()).isTrue();
+    assertThat(result.findings()).isEmpty();
+  }
+
+  @Test
+  void reviewCodeWithTooManyFindingsFallsBackDegraded() {
+    String tooMany =
+        "{\"findings\":["
+            + "{\"component\":\"c\",\"description\":\"d\",\"severity\":\"LOW\",\"source\":\"s\"},"
+            + "{\"component\":\"c\",\"description\":\"d\",\"severity\":\"LOW\",\"source\":\"s\"},"
+            + "{\"component\":\"c\",\"description\":\"d\",\"severity\":\"LOW\",\"source\":\"s\"},"
+            + "{\"component\":\"c\",\"description\":\"d\",\"severity\":\"LOW\",\"source\":\"s\"},"
+            + "{\"component\":\"c\",\"description\":\"d\",\"severity\":\"LOW\",\"source\":\"s\"},"
+            + "{\"component\":\"c\",\"description\":\"d\",\"severity\":\"LOW\",\"source\":\"s\"},"
+            + "{\"component\":\"c\",\"description\":\"d\",\"severity\":\"LOW\",\"source\":\"s\"},"
+            + "{\"component\":\"c\",\"description\":\"d\",\"severity\":\"LOW\",\"source\":\"s\"},"
+            + "{\"component\":\"c\",\"description\":\"d\",\"severity\":\"LOW\",\"source\":\"s\"}"
+            + "],\"riskCategories\":[]}";
+    AiAnalysisService service = serviceWith(new FakeChatModel(tooMany, tooMany, tooMany));
+
+    CodeReviewResult result = service.reviewCode("Alterar desconto VIP", "evidencia");
+
+    assertThat(result.degraded()).isTrue();
   }
 
   static class FakeChatModel implements ChatModel {
