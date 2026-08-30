@@ -1,7 +1,7 @@
 ---
 name: openspec-ff-change
 description: Fast-forward through OpenSpec artifact creation. Use when the user wants to quickly create all artifacts needed for implementation without stepping through each one individually.
-allowed-tools: Bash(openspec:*)
+allowed-tools: Bash(openspec:*), Bash(git:*), Bash(gh:*)
 license: MIT
 compatibility: Requires openspec CLI.
 metadata:
@@ -107,6 +107,7 @@ After completing all artifacts, summarize:
 
 **Guardrails**
 - Create every artifact the apply phase transitively depends on, not just the ids listed in `apply.requires`
+- **Kanban (fluxo automatizado):** se `.kilo/flow/<name>.json` não existir, execute a Fase 1 (`kanban-plan`) de `.kilo/workflows/opsx-flow.md` ANTES de criar o `tasks.md` (proponha a tabela a partir do roadmap/descrição, aguarde confirmação, crie as issues e grave o estado). Ao criar o `tasks.md`, cada grupo `## N. <título>` deve corresponder 1:1 a uma subtarefa `[NN.N]` do Kanban; se a decomposição divergir, reconciliar: `gh issue edit <n> --title "<novo título>"` e atualizar o estado em `.kilo/flow/<name>.json`
 - Always read dependency artifacts before creating a new one - re-read from disk, not from conversation memory (files may have changed since you last saw them)
 - If context is critically unclear, ask the user - but prefer making reasonable decisions to keep momentum
 - If a change with that name already exists, suggest continuing that change instead
