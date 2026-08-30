@@ -11,8 +11,12 @@ import com.ai.change.request.analyzer.domain.ChangeRequestStatus;
 import com.ai.change.request.analyzer.domain.RiskAssessment;
 import com.ai.change.request.analyzer.service.AgentResultMapper;
 import com.ai.change.request.analyzer.service.AnalysisService;
+import com.ai.change.request.analyzer.service.ApprovalService;
+import com.ai.change.request.analyzer.web.ApprovalDtos.ApprovalRequest;
+import com.ai.change.request.analyzer.web.ApprovalDtos.ApprovalResponse;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
+import java.util.List;
 import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -35,16 +39,19 @@ public class ChangeRequestController {
   private final AgentClient agentClient;
   private final AgentResultMapper agentResultMapper;
   private final AnalysisService analysisService;
+  private final ApprovalService approvalService;
 
   public ChangeRequestController(
       ChangeRequestRepository repository,
       AgentClient agentClient,
       AgentResultMapper agentResultMapper,
-      AnalysisService analysisService) {
+      AnalysisService analysisService,
+      ApprovalService approvalService) {
     this.repository = repository;
     this.agentClient = agentClient;
     this.agentResultMapper = agentResultMapper;
     this.analysisService = analysisService;
+    this.approvalService = approvalService;
   }
 
   @PostMapping
@@ -60,7 +67,8 @@ public class ChangeRequestController {
     try {
       var agentResponse = agentClient.analyze(request.getId().toString(), body.text(), traceId);
       ChangeAnalysis analysis = agentResultMapper.toAnalysis(request, agentResponse.result());
-      analysisService.persistAnalysis(request, analysis);
+      analysisService.persistAnalysis(
+          request, analysis, agentResultMapper.toSecurityEvents(agentResponse.result()));
       request.setStatus(ChangeRequestStatus.COMPLETED);
     } catch (AgentUnavailableException e) {
       request.setStatus(ChangeRequestStatus.FAILED);
@@ -87,6 +95,21 @@ public class ChangeRequestController {
     return toResponse(loadRequest(id));
   }
 
+  @PostMapping("/{id}/approval")
+  public ApprovalResponse approve(
+      @PathVariable UUID id,
+      @Valid @RequestBody ApprovalRequest body,
+      HttpServletRequest httpRequest) {
+    String traceId = (String) httpRequest.getAttribute(TraceIdFilter.TRACE_ID_ATTRIBUTE);
+    Approval approval = approvalService.decide(id, body.approver(), body.decision(), traceId);
+    return new ApprovalResponse(
+        approval.getStatus(),
+        approval.getApprover(),
+        approval.getDecision(),
+        approval.getDecidedAt(),
+        approval.getTraceId());
+  }
+
   @GetMapping("/{id}/analysis")
   public AnalysisResponse getAnalysis(@PathVariable UUID id) {
     ChangeRequest request = loadRequest(id);
@@ -96,6 +119,13 @@ public class ChangeRequestController {
     }
     RiskAssessment riskAssessment = analysis.getRiskAssessment();
     Approval approval = request.getApproval();
+    List<AgentGatewayDtos.SecurityEventDto> securityEvents =
+        request.getSecurityAssessments().stream()
+            .map(
+                event ->
+                    new AgentGatewayDtos.SecurityEventDto(
+                        event.getType(), event.getSource(), event.getEvidence(), event.getAction()))
+            .toList();
     return new AnalysisResponse(
         id,
         riskAssessment != null ? riskAssessment.getLevel() : null,
@@ -114,7 +144,8 @@ public class ChangeRequestController {
                         r.getComponent(), r.getDescription(), r.getPriority()))
             .toList(),
         approval != null ? approval.isRequired() : null,
-        approval != null ? approval.getStatus() : null);
+        approval != null ? approval.getStatus() : null,
+        new AgentGatewayDtos.SecurityAssessmentDto(!securityEvents.isEmpty(), securityEvents));
   }
 
   private ChangeRequest loadRequest(UUID id) {

@@ -9,8 +9,11 @@ import com.ai.change.request.analyzer.domain.ImpactFinding;
 import com.ai.change.request.analyzer.domain.RiskAssessment;
 import com.ai.change.request.analyzer.domain.RiskPolicy;
 import com.ai.change.request.analyzer.domain.TestRecommendation;
+import com.ai.change.request.analyzer.security.SecurityAssessmentService;
+import com.ai.change.request.analyzer.security.SecurityAssessmentService.SecurityEvent;
 import com.ai.change.request.analyzer.web.CreateAnalysisRequest;
 import com.ai.change.request.analyzer.web.GlobalExceptionHandler.ChangeRequestNotFoundException;
+import java.util.List;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -21,14 +24,17 @@ public class AnalysisService {
   private final ChangeRequestRepository changeRequestRepository;
   private final ChangeAnalysisRepository changeAnalysisRepository;
   private final RiskPolicy riskPolicy;
+  private final SecurityAssessmentService securityAssessmentService;
 
   public AnalysisService(
       ChangeRequestRepository changeRequestRepository,
       ChangeAnalysisRepository changeAnalysisRepository,
-      RiskPolicy riskPolicy) {
+      RiskPolicy riskPolicy,
+      SecurityAssessmentService securityAssessmentService) {
     this.changeRequestRepository = changeRequestRepository;
     this.changeAnalysisRepository = changeAnalysisRepository;
     this.riskPolicy = riskPolicy;
+    this.securityAssessmentService = securityAssessmentService;
   }
 
   @Transactional
@@ -63,12 +69,20 @@ public class AnalysisService {
 
   @Transactional
   public ChangeAnalysis persistAnalysis(ChangeRequest request, ChangeAnalysis analysis) {
+    return persistAnalysis(request, analysis, List.of());
+  }
+
+  /** Persiste a analise e os eventos de seguranca mapeados do resultado do agente. */
+  @Transactional
+  public ChangeAnalysis persistAnalysis(
+      ChangeRequest request, ChangeAnalysis analysis, List<SecurityEvent> securityEvents) {
     RiskAssessment riskAssessment = analysis.getRiskAssessment();
     RiskPolicy.RiskDecision decision =
         riskAssessment != null
             ? riskPolicy.evaluate(riskAssessment.getLevel(), riskAssessment.getConfidence())
             : riskPolicy.evaluate(null, null);
     persistAnalysis(request, analysis, decision);
+    securityAssessmentService.persist(request, securityEvents);
     return analysis;
   }
 
