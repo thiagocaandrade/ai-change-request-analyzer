@@ -34,6 +34,7 @@ public class SecurityAssessmentService {
   public static final String SOURCE_CODE = "code";
   public static final String SOURCE_KNOWLEDGE = "knowledge";
   public static final String SOURCE_HISTORY = "history";
+  public static final String SOURCE_LOG = "log_content";
   public static final String ACTION_IGNORED = "IGNORED";
 
   static final List<String> INJECTION_MARKERS =
