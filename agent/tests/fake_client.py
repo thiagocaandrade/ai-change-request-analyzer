@@ -22,14 +22,17 @@ class FakeAgentClient:
     def classify(self, text, trace_id=None):
         return self._call("classify", text, trace_id)
 
-    def analyze_code(self, text, trace_id=None):
-        return self._call("analyze_code", text, trace_id)
+    def analyze_code(self, text, trace_id=None, request_id=None):
+        return self._call("analyze_code", text, trace_id, request_id)
 
-    def retrieve_knowledge(self, text, trace_id=None):
-        return self._call("retrieve_knowledge", text, trace_id)
+    def retrieve_knowledge(self, text, trace_id=None, request_id=None):
+        return self._call("retrieve_knowledge", text, trace_id, request_id)
 
-    def retrieve_history(self, text, trace_id=None):
-        return self._call("retrieve_history", text, trace_id)
+    def retrieve_history(self, text, trace_id=None, request_id=None):
+        return self._call("retrieve_history", text, trace_id, request_id)
+
+    def security_assessment(self, payload, trace_id=None):
+        return self._call("security_assessment", payload, trace_id)
 
     def analyze_impact(self, payload, trace_id=None):
         return self._call("analyze_impact", payload, trace_id)
@@ -44,6 +47,7 @@ class FakeAgentClient:
 def happy_client():
     return FakeAgentClient(
         classify={"category": "business_rule", "notes": "regra de desconto", "degraded": False},
+        security_assessment={"detected": False, "events": [], "degraded": False},
         analyze_code={
             "findings": [
                 {
@@ -105,6 +109,7 @@ def unavailable_client():
     error = AgentUnavailableError("aplicacao indisponivel apos 3 tentativas")
     return FakeAgentClient(
         classify=error,
+        security_assessment=error,
         analyze_code=error,
         retrieve_knowledge=error,
         retrieve_history=error,
