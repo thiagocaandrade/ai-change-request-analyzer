@@ -15,9 +15,9 @@
 
 ## 3. Detecção de anomalia e tendência de falha
 
-- [ ] 3.1 Implementar `devops/AnomalyService` determinístico (sem LLM): baseline = média móvel das últimas 5 observações, desvio relativo e severidade por limiares configuráveis em `application.yml` (`devops.anomaly.*`); verificar testes unitários das fronteiras (ex.: baseline 400ms, observado 2800ms → HIGH; desvio abaixo do limiar → sem anomalia) e reprodutibilidade (mesma entrada → mesma saída)
-- [ ] 3.2 Implementar tendência de falha em janela de 5 execuções (taxa crescente → tendência registrada), entidades `PipelineRun` e `AnomalyEvent` + repositórios (H2) e endpoint `POST /api/devops/runs` que registra execução e retorna relatório de anomalia/tendência; verificar testes: taxa crescente detectada, taxa não crescente sem tendência, eventos persistidos com traceId
-- [ ] 3.3 Registrar trace events de `anomaly_check` e `failure_trend` via `TraceService`; verificar teste de trace com os eventos em ordem cronológica e correlação por trace_id
+- [x] 3.1 Implementar `devops/AnomalyService` determinístico (sem LLM): baseline = média móvel das últimas 5 observações, desvio relativo e severidade por limiares configuráveis em `application.yml` (`devops.anomaly.*`); verificar testes unitários das fronteiras (ex.: baseline 400ms, observado 2800ms → HIGH; desvio abaixo do limiar → sem anomalia) e reprodutibilidade (mesma entrada → mesma saída)
+- [x] 3.2 Implementar tendência de falha em janela de 5 execuções (taxa crescente → tendência registrada), entidades `PipelineRun` e `AnomalyEvent` + repositórios (H2) e endpoint `POST /api/devops/runs` que registra execução e retorna relatório de anomalia/tendência; verificar testes: taxa crescente detectada, taxa não crescente sem tendência, eventos persistidos com traceId
+- [x] 3.3 Registrar trace events de `anomaly_check` e `failure_trend` via `TraceService`; verificar teste de trace com os eventos em ordem cronológica e correlação por trace_id
 
 ## 4. Workflow n8n exportável
 

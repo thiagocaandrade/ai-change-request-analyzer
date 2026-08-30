@@ -49,6 +49,12 @@ resilience:
   backoff-ms: ${RESILIENCE_BACKOFF_MS:200}
   max-backoff-ms: ${RESILIENCE_MAX_BACKOFF_MS:2000}
 
+devops:
+  anomaly:
+    window-size: ${DEVOPS_ANOMALY_WINDOW_SIZE:5}
+    high-threshold: ${DEVOPS_ANOMALY_HIGH_THRESHOLD:0.5}
+    medium-threshold: ${DEVOPS_ANOMALY_MEDIUM_THRESHOLD:0.2}
+
 tools:
   repo-root: ${TOOLS_REPO_ROOT:}
   timeout-ms: ${TOOLS_TIMEOUT_MS:5000}
