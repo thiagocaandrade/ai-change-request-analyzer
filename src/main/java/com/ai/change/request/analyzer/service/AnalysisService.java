@@ -12,8 +12,10 @@ import com.ai.change.request.analyzer.domain.RiskPolicy;
 import com.ai.change.request.analyzer.domain.TestRecommendation;
 import com.ai.change.request.analyzer.observability.AnalysisMetrics;
 import com.ai.change.request.analyzer.observability.TraceService;
+import com.ai.change.request.analyzer.qa.QaRecordService;
 import com.ai.change.request.analyzer.security.SecurityAssessmentService;
 import com.ai.change.request.analyzer.security.SecurityAssessmentService.SecurityEvent;
+import com.ai.change.request.analyzer.web.AgentGatewayDtos.QaBlockDto;
 import com.ai.change.request.analyzer.web.CreateAnalysisRequest;
 import com.ai.change.request.analyzer.web.GlobalExceptionHandler.ChangeRequestNotFoundException;
 import java.util.List;
@@ -30,6 +32,7 @@ public class AnalysisService {
   private final SecurityAssessmentService securityAssessmentService;
   private final AnalysisMetrics metrics;
   private final TraceService traceService;
+  private final QaRecordService qaRecordService;
 
   public AnalysisService(
       ChangeRequestRepository changeRequestRepository,
@@ -37,13 +40,15 @@ public class AnalysisService {
       RiskPolicy riskPolicy,
       SecurityAssessmentService securityAssessmentService,
       AnalysisMetrics metrics,
-      TraceService traceService) {
+      TraceService traceService,
+      QaRecordService qaRecordService) {
     this.changeRequestRepository = changeRequestRepository;
     this.changeAnalysisRepository = changeAnalysisRepository;
     this.riskPolicy = riskPolicy;
     this.securityAssessmentService = securityAssessmentService;
     this.metrics = metrics;
     this.traceService = traceService;
+    this.qaRecordService = qaRecordService;
   }
 
   @Transactional
@@ -73,10 +78,16 @@ public class AnalysisService {
             new TestRecommendation(
                 recommendation.component(),
                 recommendation.description(),
-                recommendation.priority()));
+                recommendation.priority(),
+                recommendation.priorityJustification(),
+                recommendation.riskCategory(),
+                recommendation.refined()));
       }
 
       persistAnalysis(request, analysis, decision);
+      if (payload.qa() != null) {
+        qaRecordService.persist(request, analysis, payload.qa());
+      }
       return analysis;
     } finally {
       metrics.recordAnalysis(TraceService.elapsedMs(start));
@@ -92,6 +103,19 @@ public class AnalysisService {
   @Transactional
   public ChangeAnalysis persistAnalysis(
       ChangeRequest request, ChangeAnalysis analysis, List<SecurityEvent> securityEvents) {
+    return persistAnalysis(request, analysis, securityEvents, null);
+  }
+
+  /**
+   * Persiste a analise com o bloco QA (registro da revisao + findings) trazido pelo resultado do
+   * agente; dedupe pelo proprio {@link QaRecordService}.
+   */
+  @Transactional
+  public ChangeAnalysis persistAnalysis(
+      ChangeRequest request,
+      ChangeAnalysis analysis,
+      List<SecurityEvent> securityEvents,
+      QaBlockDto qa) {
     long start = System.nanoTime();
     try {
       RiskAssessment riskAssessment = analysis.getRiskAssessment();
@@ -101,6 +125,7 @@ public class AnalysisService {
               : riskPolicy.evaluate(null, null);
       persistAnalysis(request, analysis, decision);
       securityAssessmentService.persist(request, securityEvents);
+      qaRecordService.persist(request, analysis, qa);
       return analysis;
     } finally {
       metrics.recordAnalysis(TraceService.elapsedMs(start));

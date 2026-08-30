@@ -17,6 +17,8 @@ public class AnalysisMetrics {
   public static final String HIGH_RISK_CHANGES = "high_risk_changes";
   public static final String PROMPT_INJECTION_COUNT = "prompt_injection_count";
   public static final String VALIDATION_FAILURES = "validation_failures";
+  public static final String QA_REVIEWS = "qa_reviews";
+  public static final String QA_REFINEMENTS = "qa_refinements";
 
   private final Timer analysisDuration;
   private final Counter llmCalls;
@@ -25,6 +27,8 @@ public class AnalysisMetrics {
   private final Counter highRiskChanges;
   private final Counter promptInjectionCount;
   private final Counter validationFailures;
+  private final Counter qaReviews;
+  private final Counter qaRefinements;
 
   public AnalysisMetrics(MeterRegistry registry) {
     this.analysisDuration =
@@ -47,6 +51,14 @@ public class AnalysisMetrics {
     this.validationFailures =
         Counter.builder(VALIDATION_FAILURES)
             .description("Saidas de LLM invalidas rejeitadas")
+            .register(registry);
+    this.qaReviews =
+        Counter.builder(QA_REVIEWS)
+            .description("Execucoes de code review com IA")
+            .register(registry);
+    this.qaRefinements =
+        Counter.builder(QA_REFINEMENTS)
+            .description("Iteracoes de refinamento de recomendacoes de teste")
             .register(registry);
   }
 
@@ -76,5 +88,13 @@ public class AnalysisMetrics {
 
   public void validationFailure() {
     validationFailures.increment();
+  }
+
+  public void qaReview() {
+    qaReviews.increment();
+  }
+
+  public void qaRefinement() {
+    qaRefinements.increment();
   }
 }

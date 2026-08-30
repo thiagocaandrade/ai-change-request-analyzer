@@ -29,12 +29,33 @@ public class TestRecommendation {
   @Column(length = 16)
   private String priority;
 
+  @Column(columnDefinition = "text")
+  private String priorityJustification;
+
+  @Column(length = 200)
+  private String riskCategory;
+
+  @Column private Boolean refined;
+
   protected TestRecommendation() {}
 
   public TestRecommendation(String component, String description, String priority) {
+    this(component, description, priority, null, null, null);
+  }
+
+  public TestRecommendation(
+      String component,
+      String description,
+      String priority,
+      String priorityJustification,
+      String riskCategory,
+      Boolean refined) {
     this.component = component;
     this.description = description;
     this.priority = priority;
+    this.priorityJustification = priorityJustification;
+    this.riskCategory = riskCategory;
+    this.refined = refined;
   }
 
   @PrePersist
@@ -66,5 +87,17 @@ public class TestRecommendation {
 
   public String getPriority() {
     return priority;
+  }
+
+  public String getPriorityJustification() {
+    return priorityJustification;
+  }
+
+  public String getRiskCategory() {
+    return riskCategory;
+  }
+
+  public Boolean getRefined() {
+    return refined;
   }
 }

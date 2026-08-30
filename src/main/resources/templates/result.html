@@ -76,19 +76,46 @@
         <h2>Testes recomendados</h2>
         <table>
             <thead>
-            <tr><th>Componente</th><th>Descrição</th><th>Prioridade</th></tr>
+            <tr><th>Componente</th><th>Descrição</th><th>Prioridade</th><th>Categoria de risco</th><th>Justificativa</th></tr>
             </thead>
             <tbody>
             <tr th:each="recommendation : ${analysis.testRecommendations}">
                 <td th:text="${recommendation.component}"></td>
                 <td th:text="${recommendation.description}"></td>
                 <td th:text="${recommendation.priority}"></td>
+                <td th:text="${recommendation.riskCategory}"></td>
+                <td th:text="${recommendation.priorityJustification}"></td>
             </tr>
             <tr th:if="${analysis.testRecommendations.isEmpty()}">
-                <td colspan="3">Nenhuma recomendação de teste registrada.</td>
+                <td colspan="5">Nenhuma recomendação de teste registrada.</td>
             </tr>
             </tbody>
         </table>
+    </section>
+
+    <section class="card" th:if="${analysis != null and analysis.qa != null}">
+        <h2>QA com IA (code review)</h2>
+        <p th:if="${analysis.qa.degraded}" class="badge badge-warning">
+            QA degradado: nenhum modelo de IA configurado ou fallback determinístico aplicado —
+            findings abaixo não foram gerados por IA.
+        </p>
+        <table th:if="${!analysis.qa.findings.isEmpty()}">
+            <thead>
+            <tr><th>Componente</th><th>Descrição</th><th>Severidade</th><th>Fonte</th></tr>
+            </thead>
+            <tbody>
+            <tr th:each="finding : ${analysis.qa.findings}">
+                <td th:text="${finding.component}"></td>
+                <td th:text="${finding.description}"></td>
+                <td th:text="${finding.severity}"></td>
+                <td th:text="${finding.source}"></td>
+            </tr>
+            </tbody>
+        </table>
+        <p th:if="${analysis.qa.findings.isEmpty()}">
+            Nenhum finding de revisão foi gerado pelo modelo (QA degradado ou sem riscos
+            identificados); as recomendações priorizadas acima seguem a matriz de risco.
+        </p>
     </section>
 
     <section class="card"

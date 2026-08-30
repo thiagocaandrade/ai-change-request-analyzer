@@ -101,6 +101,45 @@ def happy_client():
                 }
             ],
             "degraded": False,
+            "qa": {
+                "findings": [
+                    {
+                        "component": "discount-service",
+                        "description": "teste de regressao ausente",
+                        "severity": "HIGH",
+                        "source": "business-rules.md",
+                    }
+                ],
+                "recommendations": [
+                    {
+                        "component": "discount-service",
+                        "description": "cobrir regra de desconto VIP",
+                        "priority": "HIGH",
+                        "priorityJustification": "matriz deterministica",
+                        "riskCategory": "financial_business_rule_regression",
+                        "refined": True,
+                    }
+                ],
+                "riskMatrix": [
+                    {
+                        "category": "financial_business_rule_regression",
+                        "applicable": True,
+                        "impact": "HIGH",
+                        "likelihood": "MEDIUM",
+                        "priority": "HIGH",
+                        "justification": "matriz deterministica",
+                    }
+                ],
+                "degraded": False,
+                "record": {
+                    "stage": "CODE_REVIEW",
+                    "promptVersion": "code-review-v1",
+                    "resultJson": "{}",
+                    "degraded": False,
+                    "iterations": 0,
+                    "traceId": "trace-1",
+                },
+            },
         },
     )
 
