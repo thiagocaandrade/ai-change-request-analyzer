@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="pt-BR" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Resultado da análise</title>
+    <link rel="stylesheet" th:href="@{/css/app.css}">
+</head>
+<body>
+<header class="app-header">
+    <h1>AI Change Request Analyzer</h1>
+    <nav>
+        <a th:href="@{/}">Nova solicitação</a>
+        <a th:href="@{/traces/{traceId}(traceId=${request.traceId})}">Ver trace</a>
+    </nav>
+</header>
+<main class="app-main">
+    <p class="error" th:if="${error}" th:text="${error}"></p>
+
+    <section class="card">
+        <h2>Solicitação</h2>
+        <p><strong>ID:</strong> <span th:text="${request.id}"></span></p>
+        <p><strong>Status:</strong>
+            <span class="badge" th:classappend="'status-' + ${request.status.name().toLowerCase()}"
+                  th:text="${request.status}"></span>
+        </p>
+        <p><strong>Texto:</strong> <span th:text="${request.text}"></span></p>
+        <p><strong>trace_id:</strong>
+            <a th:href="@{/traces/{traceId}(traceId=${request.traceId})}" th:text="${request.traceId}"></a>
+        </p>
+        <p th:if="${request.failureReason != null}"><strong>Motivo da falha:</strong>
+            <span th:text="${request.failureReason}"></span>
+        </p>
+    </section>
+
+    <section class="card" th:if="${request.status.name() == 'FAILED'}">
+        <h2>Análise falhou</h2>
+        <p>A análise desta solicitação não foi concluída. O motivo registrado está exibido na
+            seção acima; tente novamente mais tarde.</p>
+    </section>
+
+    <section class="card">
+        <h2>Risco</h2>
+        <p th:if="${analysis == null}">A análise ainda não está disponível para esta solicitação.</p>
+        <p th:if="${analysis != null and analysis.riskLevel == null}">Risco não disponível.</p>
+        <div th:if="${analysis != null and analysis.riskLevel != null}">
+            <p><strong>Nível:</strong>
+                <span class="badge" th:classappend="'risk-' + ${analysis.riskLevel.name().toLowerCase()}"
+                      th:text="${analysis.riskLevel}"></span>
+            </p>
+            <p><strong>Confiança:</strong> <span th:text="${analysis.confidence}"></span></p>
+            <p><strong>Justificativa:</strong> <span th:text="${analysis.rationale}"></span></p>
+        </div>
+    </section>
+
+    <section class="card" th:if="${analysis != null}">
+        <h2>Findings de impacto</h2>
+        <table>
+            <thead>
+            <tr><th>Componente</th><th>Descrição</th><th>Severidade</th></tr>
+            </thead>
+            <tbody>
+            <tr th:each="finding : ${analysis.findings}">
+                <td th:text="${finding.component}"></td>
+                <td th:text="${finding.description}"></td>
+                <td th:text="${finding.severity}"></td>
+            </tr>
+            <tr th:if="${analysis.findings.isEmpty()}">
+                <td colspan="3">Nenhum finding registrado.</td>
+            </tr>
+            </tbody>
+        </table>
+    </section>
+
+    <section class="card" th:if="${analysis != null}">
+        <h2>Testes recomendados</h2>
+        <table>
+            <thead>
+            <tr><th>Componente</th><th>Descrição</th><th>Prioridade</th></tr>
+            </thead>
+            <tbody>
+            <tr th:each="recommendation : ${analysis.testRecommendations}">
+                <td th:text="${recommendation.component}"></td>
+                <td th:text="${recommendation.description}"></td>
+                <td th:text="${recommendation.priority}"></td>
+            </tr>
+            <tr th:if="${analysis.testRecommendations.isEmpty()}">
+                <td colspan="3">Nenhuma recomendação de teste registrada.</td>
+            </tr>
+            </tbody>
+        </table>
+    </section>
+
+    <section class="card"
+             th:if="${analysis != null and analysis.securityAssessment != null and analysis.securityAssessment.detected}">
+        <h2>Eventos de segurança</h2>
+        <table>
+            <thead>
+            <tr><th>Tipo</th><th>Origem</th><th>Evidência</th><th>Ação</th></tr>
+            </thead>
+            <tbody>
+            <tr th:each="event : ${analysis.securityAssessment.events}">
+                <td th:text="${event.type}"></td>
+                <td th:text="${event.source}"></td>
+                <td th:text="${event.evidence}"></td>
+                <td th:text="${event.action}"></td>
+            </tr>
+            </tbody>
+        </table>
+    </section>
+
+    <section class="card">
+        <h2>Aprovação humana</h2>
+        <p th:if="${approval == null}">Aprovação ainda não avaliada (análise não disponível).</p>
+        <p th:if="${approval != null and !approval.required}">
+            Aprovação humana <strong>não exigida</strong> para esta análise.
+        </p>
+        <div th:if="${approval != null and approval.required and approval.status.name() == 'PENDING'}">
+            <p>Aprovação humana <strong>exigida</strong> (status:
+                <span class="badge badge-warning" th:text="${approval.status}"></span>).
+                Nenhuma ação sensível será executada até a decisão.</p>
+            <form th:action="@{/requests/{id}/approval(id=${request.id})}" method="post">
+                <label for="approver">Aprovador</label>
+                <input type="text" id="approver" name="approver" required>
+                <label for="decision">Decisão</label>
+                <select id="decision" name="decision">
+                    <option value="APPROVED">APPROVED</option>
+                    <option value="REJECTED">REJECTED</option>
+                </select>
+                <button type="submit">Registrar decisão</button>
+            </form>
+        </div>
+        <div th:if="${approval != null and approval.required and approval.status.name() != 'PENDING'}">
+            <p><strong>Decisão registrada:</strong>
+                <span class="badge" th:classappend="'decision-' + ${approval.status.name().toLowerCase()}"
+                      th:text="${approval.status}"></span>
+            </p>
+            <p><strong>Aprovador:</strong> <span th:text="${approval.approver}"></span></p>
+            <p><strong>Decisão:</strong> <span th:text="${approval.decision}"></span></p>
+            <p><strong>Momento:</strong> <span th:text="${approval.decidedAt}"></span></p>
+        </div>
+    </section>
+</main>
+</body>
+</html>

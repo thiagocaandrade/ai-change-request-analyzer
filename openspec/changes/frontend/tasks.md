@@ -6,9 +6,9 @@
 
 ## 2. Tela de resultado da análise (risco, findings, plano de testes, aprovação)
 
-- [ ] 2.1 Criar template `templates/result.html` renderizando status, nível de risco, confiança, justificativa, findings (componente, descrição, severidade), recomendações de teste (componente, descrição, prioridade) e eventos de segurança (tipo, origem, evidência, ação), tudo com `th:text`; verificar `GET /requests/{id}` 200 renderizando os campos via MockMvc com análise persistida
-- [ ] 2.2 Exibir estado de aprovação: HIGH com PENDING mostra formulário de decisão (aprovador + APPROVED/REJECTED); LOW/MEDIUM mostra "aprovação não exigida" sem formulário; decisão submetida reflete APPROVED/REJECTED com aprovador na página; verificar teste MockMvc dos três estados e `mvn test` verde
-- [ ] 2.3 Tratar falha da análise: solicitação com status FAILED exibe status e motivo de forma legível; solicitação inexistente exibe página amigável 404 do próprio WebController (não o JSON do GlobalExceptionHandler); verificar teste MockMvc de ambos
+- [x] 2.1 Criar template `templates/result.html` renderizando status, nível de risco, confiança, justificativa, findings (componente, descrição, severidade), recomendações de teste (componente, descrição, prioridade) e eventos de segurança (tipo, origem, evidência, ação), tudo com `th:text`; verificar `GET /requests/{id}` 200 renderizando os campos via MockMvc com análise persistida
+- [x] 2.2 Exibir estado de aprovação: HIGH com PENDING mostra formulário de decisão (aprovador + APPROVED/REJECTED); LOW/MEDIUM mostra "aprovação não exigida" sem formulário; decisão submetida reflete APPROVED/REJECTED com aprovador na página; verificar teste MockMvc dos três estados e `mvn test` verde
+- [x] 2.3 Tratar falha da análise: solicitação com status FAILED exibe status e motivo de forma legível; solicitação inexistente exibe página amigável 404 do próprio WebController (não o JSON do GlobalExceptionHandler); verificar teste MockMvc de ambos
 
 ## 3. Página de trace (etapas, duração, tools, documentos recuperados)
 
