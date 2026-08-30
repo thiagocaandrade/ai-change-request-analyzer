@@ -9,9 +9,9 @@
 
 ## 2. Geração e refinamento de testes com IA
 
-- [ ] 2.1 Estender a geração de testes: o `QaCodeReviewService` entrega os findings de QA como evidência ao estágio `TEST_GENERATION` existente; verificar teste de que as recomendações geradas referenciam componentes dos findings e `mvn test` verde
-- [ ] 2.2 Implementar refinamento limitado: recomendações inválidas (ex.: descrição vazia) disparam até 2 iterações de regeneração com feedback, cada iteração registrada como trace event e no `QaReviewRecord`; esgotado o limite, a recomendação permanece marcada como não refinada; verificar teste unitário dos 3 caminhos (válida de primeira, refinada dentro do limite, limite esgotado)
-- [ ] 2.3 Garantir que nenhuma recomendação altera o repositório: revisar e testar que o fluxo QA apenas produz recomendações (nenhum arquivo criado/alterado); verificar teste que executa o fluxo QA e compara o working tree/lista de arquivos de teste antes e depois
+- [x] 2.1 Estender a geração de testes: o `QaCodeReviewService` entrega os findings de QA como evidência ao estágio `TEST_GENERATION` existente; verificar teste de que as recomendações geradas referenciam componentes dos findings e `mvn test` verde
+- [x] 2.2 Implementar refinamento limitado: recomendações inválidas (ex.: descrição vazia) disparam até 2 iterações de regeneração com feedback, cada iteração registrada como trace event e no `QaReviewRecord`; esgotado o limite, a recomendação permanece marcada como não refinada; verificar teste unitário dos 3 caminhos (válida de primeira, refinada dentro do limite, limite esgotado)
+- [x] 2.3 Garantir que nenhuma recomendação altera o repositório: revisar e testar que o fluxo QA apenas produz recomendações (nenhum arquivo criado/alterado); verificar teste que executa o fluxo QA e compara o working tree/lista de arquivos de teste antes e depois
 
 ## 3. Teste baseado em risco com matriz Impact × Likelihood
 
