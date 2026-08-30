@@ -25,7 +25,7 @@
 
 ## 5. Testes das telas (MockMvc/E2E) + evidência
 
-- [ ] 5.1 Criar `WebUiTest` (MockMvc): formulário válido → análise persistida → página de resultado com risco/findings; texto vazio → erro no formulário; falha do agente → página com status de falha; verificar `mvn test` verde
-- [ ] 5.2 Criar `TraceViewTest` (MockMvc): reconstrução com eventos ordenados e documentos recuperados; 404 amigável para trace inexistente; escaping de HTML em campos renderizados; verificar `mvn test` verde
-- [ ] 5.3 E2E dos Cenários A/B pelas páginas (form → resultado HIGH com aprovação → decisão refletida → trace reconstruído; Cenário B com evento de segurança exibido e risco não alterado pela injeção); verificar teste E2E verde e `mvn test` completo
-- [ ] 5.4 Registrar evidência `docs/evidence/08-frontend.png` (telas: formulário, resultado HIGH e página de trace) e atualizar README (seção frontend + matriz de requisitos); verificar presença do arquivo e consistência do README
+- [x] 5.1 Criar `WebUiTest` (MockMvc): formulário válido → análise persistida → página de resultado com risco/findings; texto vazio → erro no formulário; falha do agente → página com status de falha; verificar `mvn test` verde
+- [x] 5.2 Criar `TraceViewTest` (MockMvc): reconstrução com eventos ordenados e documentos recuperados; 404 amigável para trace inexistente; escaping de HTML em campos renderizados; verificar `mvn test` verde
+- [x] 5.3 E2E dos Cenários A/B pelas páginas (form → resultado HIGH com aprovação → decisão refletida → trace reconstruído; Cenário B com evento de segurança exibido e risco não alterado pela injeção); verificar teste E2E verde e `mvn test` completo
+- [x] 5.4 Registrar evidência `docs/evidence/08-frontend.png` (telas: formulário, resultado HIGH e página de trace) e atualizar README (seção frontend + matriz de requisitos); verificar presença do arquivo e consistência do README
