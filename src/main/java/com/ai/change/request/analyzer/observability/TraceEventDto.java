@@ -14,6 +14,7 @@ public record TraceEventDto(
     String risk,
     String tool,
     String model,
+    String detail,
     Instant createdAt) {
 
   public static TraceEventDto from(TraceEvent event) {
@@ -28,6 +29,7 @@ public record TraceEventDto(
         event.getRisk(),
         event.getTool(),
         event.getModel(),
+        event.getDetail(),
         event.getCreatedAt());
   }
 }

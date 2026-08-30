@@ -25,7 +25,7 @@ public class TraceService {
 
   /** Registra evento simples (inicio de etapa). */
   public void record(String node, String event) {
-    record(node, event, null, null, null, null, null, null);
+    record(node, event, null, null, null, null, null, null, null);
   }
 
   /** Registra evento completo com campos padronizados; nenhum campo pode conter segredo. */
@@ -38,6 +38,20 @@ public class TraceService {
       String risk,
       String tool,
       String model) {
+    record(node, event, durationMs, status, error, risk, tool, model, null);
+  }
+
+  /** Registra evento com detalhe opcional (ex.: fontes recuperadas pelo RAG). */
+  public void record(
+      String node,
+      String event,
+      Long durationMs,
+      String status,
+      String error,
+      String risk,
+      String tool,
+      String model,
+      String detail) {
     String traceId = MDC.get("trace_id");
     String requestId = MDC.get("request_id");
     log.info(
@@ -63,6 +77,7 @@ public class TraceService {
               risk,
               tool,
               model,
+              detail,
               Instant.now()));
     } catch (Exception e) {
       log.warn(

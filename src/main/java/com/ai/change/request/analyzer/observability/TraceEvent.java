@@ -46,6 +46,9 @@ public class TraceEvent {
   @Column(length = 128)
   private String model;
 
+  @Column(length = 1024)
+  private String detail;
+
   @Column(nullable = false)
   private Instant createdAt;
 
@@ -63,6 +66,34 @@ public class TraceEvent {
       String tool,
       String model,
       Instant createdAt) {
+    this(
+        traceId,
+        requestId,
+        node,
+        event,
+        durationMs,
+        status,
+        error,
+        risk,
+        tool,
+        model,
+        null,
+        createdAt);
+  }
+
+  public TraceEvent(
+      String traceId,
+      String requestId,
+      String node,
+      String event,
+      Long durationMs,
+      String status,
+      String error,
+      String risk,
+      String tool,
+      String model,
+      String detail,
+      Instant createdAt) {
     this.traceId = traceId;
     this.requestId = requestId;
     this.node = node;
@@ -73,6 +104,7 @@ public class TraceEvent {
     this.risk = risk;
     this.tool = tool;
     this.model = model;
+    this.detail = detail;
     this.createdAt = createdAt;
   }
 
@@ -128,6 +160,10 @@ public class TraceEvent {
 
   public String getModel() {
     return model;
+  }
+
+  public String getDetail() {
+    return detail;
   }
 
   public Instant getCreatedAt() {

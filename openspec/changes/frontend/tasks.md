@@ -12,10 +12,10 @@
 
 ## 3. Página de trace (etapas, duração, tools, documentos recuperados)
 
-- [ ] 3.1 Adicionar campo opcional `detail` a `TraceEvent` (coluna varchar limitada), ao `TraceEventDto` e ao construtor do `TraceService`; verificar teste de persistência H2 existente ainda verde e novo evento com detail salvo/recuperado
-- [ ] 3.2 Registrar fontes recuperadas no `RagService`: após busca com sucesso, evento `rag_search` com `detail` = JSON compacto de `[{source, document_id, score}]` (truncado a 1024 caracteres, sem conteúdo dos documentos); busca degradada continua sem detail; verificar `RagServiceTest` cobrindo sucesso com fontes, sucesso sem hits e degradado
-- [ ] 3.3 Criar rota `GET /traces/{traceId}` no `WebController` (consulta `TraceService`) e template `templates/trace.html` listando eventos em ordem cronológica (etapa, evento, duração, status, erro, tool, modelo, momento) com a seção de documentos recuperados (fontes + score) quando houver detail; verificar MockMvc: eventos renderizados na ordem e documentos exibidos
-- [ ] 3.4 Trace inexistente renderiza página amigável "trace não encontrado"; nenhum segredo aparece nos eventos renderizados; verificar teste MockMvc com trace vazio e verificação de ausência de padrões de segredo
+- [x] 3.1 Adicionar campo opcional `detail` a `TraceEvent` (coluna varchar limitada), ao `TraceEventDto` e ao construtor do `TraceService`; verificar teste de persistência H2 existente ainda verde e novo evento com detail salvo/recuperado
+- [x] 3.2 Registrar fontes recuperadas no `RagService`: após busca com sucesso, evento `rag_search` com `detail` = JSON compacto de `[{source, document_id, score}]` (truncado a 1024 caracteres, sem conteúdo dos documentos); busca degradada continua sem detail; verificar `RagServiceTest` cobrindo sucesso com fontes, sucesso sem hits e degradado
+- [x] 3.3 Criar rota `GET /traces/{traceId}` no `WebController` (consulta `TraceService`) e template `templates/trace.html` listando eventos em ordem cronológica (etapa, evento, duração, status, erro, tool, modelo, momento) com a seção de documentos recuperados (fontes + score) quando houver detail; verificar MockMvc: eventos renderizados na ordem e documentos exibidos
+- [x] 3.4 Trace inexistente renderiza página amigável "trace não encontrado"; nenhum segredo aparece nos eventos renderizados; verificar teste MockMvc com trace vazio e verificação de ausência de padrões de segredo
 
 ## 4. Estilo CSS e navegação entre as telas
 

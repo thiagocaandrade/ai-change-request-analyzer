@@ -4,11 +4,18 @@ import com.ai.change.request.analyzer.domain.Approval;
 import com.ai.change.request.analyzer.domain.ApprovalDecision;
 import com.ai.change.request.analyzer.domain.ChangeRequest;
 import com.ai.change.request.analyzer.domain.ChangeRequestRepository;
+import com.ai.change.request.analyzer.observability.TraceEvent;
+import com.ai.change.request.analyzer.observability.TraceService;
 import com.ai.change.request.analyzer.web.ApprovalDtos.ApprovalRequest;
 import com.ai.change.request.analyzer.web.GlobalExceptionHandler.ApprovalConflictException;
 import com.ai.change.request.analyzer.web.GlobalExceptionHandler.ChangeRequestNotFoundException;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -24,10 +31,10 @@ import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 import org.springframework.web.servlet.view.RedirectView;
 
 /**
- * Paginas Thymeleaf do analisador: formulario de solicitacao e resultado da analise (com decisao
- * humana). Nao duplica a orquestracao da API: delega aos beans dos controllers REST; erros de
- * pagina sao tratados aqui (HTML amigavel, nunca JSON). Todo dado nao confiavel e renderizado com
- * {@code th:text} (escapado).
+ * Paginas Thymeleaf do analisador: formulario de solicitacao, resultado da analise (com decisao
+ * humana) e reconstrucao de execucao por trace_id. Nao duplica a orquestracao da API: delega aos
+ * beans dos controllers REST e ao {@link TraceService}; erros de pagina sao tratados aqui (HTML
+ * amigavel, nunca JSON). Todo dado nao confiavel e renderizado com {@code th:text} (escapado).
  */
 @Controller
 public class WebController {
@@ -36,11 +43,18 @@ public class WebController {
 
   private final ChangeRequestController changeRequestController;
   private final ChangeRequestRepository repository;
+  private final TraceService traceService;
+  private final ObjectMapper objectMapper;
 
   public WebController(
-      ChangeRequestController changeRequestController, ChangeRequestRepository repository) {
+      ChangeRequestController changeRequestController,
+      ChangeRequestRepository repository,
+      TraceService traceService,
+      ObjectMapper objectMapper) {
     this.changeRequestController = changeRequestController;
     this.repository = repository;
+    this.traceService = traceService;
+    this.objectMapper = objectMapper;
   }
 
   /** Formulario da solicitacao de alteracao. */
@@ -55,6 +69,12 @@ public class WebController {
       this.text = text;
     }
   }
+
+  /** Evento da execucao com os documentos recuperados (parsed do detalhe), para a pagina. */
+  public record TraceItem(TraceEvent event, List<RetrievedDocument> documents) {}
+
+  /** Fonte de documento recuperado exibida na reconstrucao da execucao. */
+  public record RetrievedDocument(String source, String documentId, Double score) {}
 
   @GetMapping("/")
   public String form(Model model) {
@@ -149,6 +169,21 @@ public class WebController {
     return redirectSeeOther("/traces/" + id);
   }
 
+  @GetMapping("/traces/{traceId}")
+  public String trace(@PathVariable String traceId, Model model, HttpServletResponse response) {
+    List<TraceEvent> events = traceService.findByTraceId(traceId);
+    if (events.isEmpty()) {
+      return notFound(model, response, "Trace não encontrado: nenhum evento registrado.");
+    }
+    List<TraceItem> items =
+        events.stream().map(e -> new TraceItem(e, parseDocuments(e.getDetail()))).toList();
+    model.addAttribute("traceId", traceId);
+    model.addAttribute("items", items);
+    model.addAttribute(
+        "hasDocuments", items.stream().anyMatch(item -> !item.documents().isEmpty()));
+    return "trace";
+  }
+
   private String notFound(Model model, HttpServletResponse response, String message) {
     response.setStatus(HttpStatus.NOT_FOUND.value());
     model.addAttribute("message", message);
@@ -159,5 +194,33 @@ public class WebController {
     RedirectView view = new RedirectView(url, true);
     view.setStatusCode(HttpStatus.SEE_OTHER);
     return view;
+  }
+
+  private List<RetrievedDocument> parseDocuments(String detail) {
+    if (detail == null || detail.isBlank()) {
+      return List.of();
+    }
+    try {
+      JsonNode root = objectMapper.readTree(detail);
+      if (!root.isArray()) {
+        return List.of();
+      }
+      List<RetrievedDocument> documents = new ArrayList<>();
+      for (JsonNode node : root) {
+        documents.add(
+            new RetrievedDocument(
+                textOrNull(node, "source"),
+                textOrNull(node, "document_id"),
+                node.path("score").isNumber() ? node.path("score").asDouble() : null));
+      }
+      return List.copyOf(documents);
+    } catch (JsonProcessingException e) {
+      return List.of();
+    }
+  }
+
+  private String textOrNull(JsonNode node, String field) {
+    JsonNode value = node.path(field);
+    return value.isNull() || value.isMissingNode() ? null : value.asText();
   }
 }
