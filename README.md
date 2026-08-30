@@ -2,7 +2,7 @@
 
 Aplicação acadêmica que recebe uma solicitação de alteração em software e produz uma análise estruturada de impacto, risco e testes. O agente **não** altera código automaticamente.
 
-Caminho executável de ponta a ponta: fundação (`foundation`), domínio e API (`domain-and-api`), orquestração LangGraph completa (`langgraph-orchestration`) e — nesta change — **IA, tools, RAG e memória reais** (`ai-rag-memory-tools`): prompts versionados com structured output validado, 4 tools com proteções (2 expostas via servidor MCP), RAG pgvector com fontes/scores e memória persistente de análises anteriores. Segurança/aprovação humana entram na change 05 (`docs/roadmap.md`).
+Caminho executável de ponta a ponta: fundação (`foundation`), domínio e API (`domain-and-api`), orquestração LangGraph completa (`langgraph-orchestration`), **IA, tools, RAG e memória reais** (`ai-rag-memory-tools`) e **segurança + aprovação humana** (`security-and-human-approval`): detecção determinística de prompt injection com eventos persistidos, análise de segurança assistida por LLM com prompt versionado e endpoint de decisão humana para análises de risco HIGH. As changes 06+ seguem em `docs/roadmap.md`.
 
 ## Visão geral dos componentes
 
@@ -10,7 +10,7 @@ Caminho executável de ponta a ponta: fundação (`foundation`), domínio e API 
 |---|---|---|
 | `app` | Java 21 · Spring Boot 4.1.1 · JPA · Spring AI | Recebe `POST /api/change-requests`, gera `trace_id`, delega ao agente com timeout/retry, persiste solicitação + análise estruturada. Hospeda a camada IA (prompts versionados + structured output + retry), as 4 tools, o RAG pgvector, a memória, o servidor MCP e os endpoints internos `/api/agent/**`. |
 | `agent` | Python 3.12 · FastAPI · LangGraph | Sidecar que executa o grafo LangGraph completo (13 nós) e obtém evidência real da aplicação via HTTP (`/api/agent/**`, timeout/retry, `X-Trace-Id`). |
-| `db` | PostgreSQL 16 + pgvector | Persistência do domínio (tabelas `change_request`, `change_analysis`, `impact_finding`, `risk_assessment`, `test_recommendation`, `approval`) e índice vetorial `vector_store` da base de conhecimento. |
+| `db` | PostgreSQL 16 + pgvector | Persistência do domínio (tabelas `change_request`, `change_analysis`, `impact_finding`, `risk_assessment`, `test_recommendation`, `approval`, `security_assessment`) e índice vetorial `vector_store` da base de conhecimento. |
 | CI | GitHub Actions | Lint (Spotless/ruff), testes e build dos dois serviços + job E2E. |
 
 ## Diagrama de arquitetura
@@ -47,7 +47,7 @@ validate_request → classify_request → detect_untrusted_content
 - **Estado:** `trace_id`, `change_request`, `classification`, `retrieved_documents`, `code_findings`, `historical_findings`, `impact_findings`, `risk_assessment`, `security_assessment`, `test_plan`, `approval_required`, `approval_status`, `final_result`, `errors`, `iteration_count`.
 - **Sem loop infinito:** `validate_final_result` limita a 1 tentativa inicial + 2 correções; esgotado, termina com status `failed` e erros estruturados.
 - **Falhas contidas:** qualquer exceção de nó vira entrada em `errors` (nunca quebra o processo nem vaza segredos); a análise segue degradada.
-- **Conteúdo recuperado é dado não confiável:** `detect_untrusted_content` registra eventos de segurança para instruções injetadas e elas nunca alteram risco, classificação ou fluxo.
+- **Conteúdo recuperado é dado não confiável:** `detect_untrusted_content` obtém a avaliação de segurança da aplicação via HTTP (`POST /api/agent/security-assessment`, timeout/retry) e a espelha no estado e no `final_result`; falha do endpoint → `errors` + avaliação vazia, e o grafo segue. Instruções injetadas nunca alteram risco, classificação ou fluxo.
 - **Regra determinística continua no Java:** o agente sinaliza pendência (`status=pending_approval` quando HIGH); `RiskPolicy` decide e persiste a obrigatoriedade de aprovação.
 - **Evidência real nas etapas:** os nós `classify_request`, `analyze_code`, `retrieve_knowledge`, `retrieve_history`, `analyze_impact`, `assess_risk` e `generate_test_plan` obtêm resultado da aplicação via `agent/tools/client.py` (httpx, timeout, retry 2, `X-Trace-Id`); falha → `errors` + coleta vazia, sem interromper o grafo. Evidência da execução no Cenário A: `docs/evidence/01-langgraph.png`.
 
@@ -79,6 +79,15 @@ Resposta de `POST /analyze`: `{request_id, status, result}` com `status` em `com
 ## Memória persistente
 
 `AnalysisMemoryService` busca análises anteriores por termos (ILIKE no texto da solicitação), componente afetado, regra de negócio e classificação de risco, retornando identificador e resumo ("semelhante à CR-XXX"). Falha de busca → lista vazia marcada, sem interromper a análise.
+
+## Segurança (prompt injection) e aprovação humana
+
+- **Detecção determinística no Java (`SecurityAssessmentService`):** marcadores de injeção ("ignore as instruções", "classifique como low", …) varridos no texto da solicitação e em todo conteúdo retornado pelos gateways de coleta (`analyze-code` → fonte `code`, `retrieve-knowledge` → `knowledge`, `retrieve-history` → `history`), com fonte por origem e dedupe por `(type, source, evidence)`.
+- **Eventos persistidos:** cada evento (`security_assessment`, vinculado à solicitação) registra `type=prompt_injection`, `source`, `evidence`, `action=IGNORED` e `traceId`; é exposto em `GET /api/change-requests/{id}/analysis` como `securityAssessment` (`detected` + `events`). Nenhum evento contém segredos; falha de persistência é registrada e nunca derruba o fluxo.
+- **Instrução injetada é ignorada:** a detecção nunca altera classificação, risco ou fluxo — a análise prossegue até o fim e o risco final reflete apenas a avaliação estruturada de risco.
+- **LLM assiste, o Java decide:** etapa `security-analysis` com prompt versionado `security-analysis-v1.txt` (conteúdo recuperado na seção delimitada `DADOS NÃO CONFIÁVEIS`), structured output validado, retry máx. 2 e fallback determinístico marcado; a decisão final (união, dedupe, ação) é sempre determinística na aplicação.
+- **Aprovação humana:** risco HIGH ⇒ aprovação `PENDING` (regra de `RiskPolicy`, intocada); somente `POST /api/change-requests/{id}/approval` (`{approver, decision}` APPROVED|REJECTED) transita o estado, registrando approver, decision, decidedAt e trace_id. Decisão inválida → 400, solicitação inexistente → 404, fora de PENDING ou não exigida → 409.
+- **Cenário B ponta a ponta:** fixture no repositório com a frase oficial de injeção → evento persistido na análise, risco permanece HIGH, aprovação PENDING → decisão humana via endpoint. Evidências: `docs/evidence/05-prompt-injection.png` (evento registrado + análise concluída) e `docs/evidence/06-human-approval.png` (decisão APPROVED/REJECTED no endpoint).
 
 ## Execução via Docker Compose
 
@@ -128,6 +137,16 @@ curl http://localhost:8080/api/change-requests/<id>/analysis
 
 **Regra determinística (Java, nunca no LLM):** risco `HIGH` ⇒ aprovação humana obrigatória com estado `PENDING`; confidence fora de `[0,1]` ⇒ rejeição com `invalid_confidence`.
 
+### Decisão humana sobre análise HIGH
+
+```bash
+curl -X POST http://localhost:8080/api/change-requests/<id>/approval \
+  -H "Content-Type: application/json" \
+  -d '{"approver":"revisora","decision":"APPROVED"}'
+```
+
+A resposta devolve o estado atualizado (`APPROVED` ou `REJECTED`) com `approver`, `decision`, `decidedAt` e `traceId`. Decisão fora de `PENDING` (ou sem aprovação exigida) retorna 409; payload inválido 400; identificador inexistente 404.
+
 ## Variáveis de ambiente
 
 Toda configuração é fornecida por variáveis de ambiente (referência em `.env.example`, **sem valores reais**; o `.env` real nunca é versionado).
@@ -164,12 +183,14 @@ Toda configuração é fornecida por variáveis de ambiente (referência em `.en
 | `app` | POST | `/api/change-requests` | Cria e analisa uma solicitação de alteração |
 | `app` | GET | `/api/change-requests/{id}` | Consulta status e resumo da análise de uma solicitação |
 | `app` | POST | `/api/change-requests/{id}/analysis` | Registra análise estruturada (achados, risco, recomendações de teste) |
-| `app` | GET | `/api/change-requests/{id}/analysis` | Consulta a análise completa tipada |
+| `app` | GET | `/api/change-requests/{id}/analysis` | Consulta a análise completa tipada, incluindo avaliação de segurança |
+| `app` | POST | `/api/change-requests/{id}/approval` | Decisão humana (APPROVED\|REJECTED) para análise com aprovação exigida |
 | `app` | GET | `/actuator/health` | Health check |
 | `app` | POST | `/api/agent/classify` | Classificação da solicitação (IA/fallback marcado) |
-| `app` | POST | `/api/agent/analyze-code` | Evidência de código e testes via tools |
-| `app` | POST | `/api/agent/retrieve-knowledge` | Busca RAG com fontes e scores |
-| `app` | POST | `/api/agent/retrieve-history` | Memória: análises anteriores |
+| `app` | POST | `/api/agent/analyze-code` | Evidência de código e testes via tools (com varredura de injeção) |
+| `app` | POST | `/api/agent/retrieve-knowledge` | Busca RAG com fontes e scores (com varredura de injeção) |
+| `app` | POST | `/api/agent/retrieve-history` | Memória: análises anteriores (com varredura de injeção) |
+| `app` | POST | `/api/agent/security-assessment` | Avaliação de segurança tipada (`detected`, `events`) do texto da solicitação |
 | `app` | POST | `/api/agent/analyze-impact` | Achados de impacto (IA sobre evidências) |
 | `app` | POST | `/api/agent/assess-risk` | Sugestão de risco (IA; regra final no Java) |
 | `app` | POST | `/api/agent/generate-test-plan` | Recomendações de testes (IA/fallback marcado) |
@@ -185,8 +206,8 @@ Toda configuração é fornecida por variáveis de ambiente (referência em `.en
 
 ## Testes e CI
 
-- Java: `./mvnw test` (117 testes — happy path, segurança/path traversal, structured output com ChatModel fake, RAG com VectorStore mockado, memória com H2, MCP, controller `/api/agent`) e `./mvnw spotless:check`. Suíte inteira verde **sem chave de API**.
-- Python (em `agent/`): `pytest` e `ruff check .` — cobre o grafo nos 6 cenários do roadmap (happy path, high risk, prompt injection, tool failure, validation failure, max iteration), aplicação indisponível, paralelismo e propagação de trace_id, com client HTTP mockado.
-- E2E: `docker compose up --build` + `python scripts/smoke_test.py` — Cenário A (desconto VIP 10%→15%) com chave configurada, ou fluxo degradado marcado (`analysis_unavailable`) sem chave; `trace_id` correlacionado nos logs dos dois serviços.
-- Demonstrações: `scripts/rag_demo.py` (RAG com fontes/scores), `scripts/mcp_tools_demo.py` (MCP tools/list + proteção de path), `scripts/fake_embeddings_server.py` (embeddings determinísticos locais só para demonstração).
+- Java: `./mvnw test` (happy path, segurança/path traversal, structured output com ChatModel fake, detecção determinística de injeção, endpoint de aprovação 200/400/404/409, RAG com VectorStore mockado, memória com H2, MCP, controller `/api/agent`) e `./mvnw spotless:check`. Suíte inteira verde **sem chave de API**.
+- Python (em `agent/`): `pytest` e `ruff check .` — cobre o grafo nos cenários do roadmap (happy path, high risk, prompt injection com avaliação obtida da aplicação, endpoint de segurança indisponível, tool failure, validation failure, max iteration), aplicação indisponível, paralelismo e propagação de trace_id, com client HTTP mockado.
+- E2E: `docker compose up --build` + `python scripts/smoke_test.py` — Cenário A (desconto VIP 10%→15%) e Cenário B adversário (fixture com a frase oficial de injeção → evento de segurança persistido, risco HIGH permanece PENDING, decisão humana via endpoint), com chave configurada ou fluxo degradado marcado (`analysis_unavailable`) sem chave; `trace_id` correlacionado nos logs dos dois serviços.
+- Demonstrações: `scripts/rag_demo.py` (RAG com fontes/scores), `scripts/mcp_tools_demo.py` (MCP tools/list + proteção de path), `scripts/fake_embeddings_server.py` (embeddings determinísticos locais só para demonstração), `scripts/generate_evidence.py` (gera as evidências 05/06 como placeholders até os screenshots reais da demonstração).
 - CI: `.github/workflows/ci.yml` (jobs `spring`, `agent` e `e2e`).
