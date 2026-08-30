@@ -30,6 +30,11 @@ public class GlobalExceptionHandler {
     return build(HttpStatus.NOT_FOUND, "analysis_not_found", e.getMessage());
   }
 
+  @ExceptionHandler(ApprovalConflictException.class)
+  ResponseEntity<ErrorResponse> handleApprovalConflict(ApprovalConflictException e) {
+    return build(HttpStatus.CONFLICT, "approval_conflict", e.getMessage());
+  }
+
   @ExceptionHandler(MethodArgumentNotValidException.class)
   ResponseEntity<ErrorResponse> handleValidation(MethodArgumentNotValidException e) {
     String detail =
@@ -79,6 +84,12 @@ public class GlobalExceptionHandler {
   public static class AnalysisNotFoundException extends RuntimeException {
     public AnalysisNotFoundException(UUID id) {
       super("analise nao encontrada para a solicitacao: " + id);
+    }
+  }
+
+  public static class ApprovalConflictException extends RuntimeException {
+    public ApprovalConflictException(UUID id) {
+      super("aprovacao nao esta PENDING ou nao e exigida para a solicitacao: " + id);
     }
   }
 }
