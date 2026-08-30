@@ -1,7 +1,7 @@
 ---
 name: openspec-new-change
 description: Start a new OpenSpec change using the experimental artifact workflow. Use when the user wants to create a new feature, fix, or modification with a structured step-by-step approach.
-allowed-tools: Bash(openspec:*)
+allowed-tools: Bash(openspec:*), Bash(git:*), Bash(gh:*)
 license: MIT
 compatibility: Requires openspec CLI.
 metadata:
@@ -17,6 +17,19 @@ Start a new change using the experimental artifact-driven approach.
 **Input**: The user's request should include a change name (kebab-case) OR a description of what they want to build.
 
 **Steps**
+
+0. **Kanban GitHub primeiro (fluxo automatizado)**
+
+   Antes de criar a change, execute a Fase 1 (`kanban-plan`) do fluxo `.kilo/workflows/opsx-flow.md`:
+
+   - Se `.kilo/flow/<name>.json` já existe e tem `phase` além de `kanban-plan`, pule este passo.
+   - Carregue helpers: `. .kilo/scripts/kanban.ps1`
+   - Derive do `docs/roadmap.md` (ou da descrição do usuário) a decomposição: 1 tarefa pai `[NN] <título>` (label `tarefa`) + 2–6 subtarefas `[NN.M] <título>` (label `subtarefa`). `NN` = número da linha do roadmap.
+   - Mostre a tabela proposta e aguarde confirmação do usuário. Não crie issues sem confirmação.
+   - Crie as issues (`New-KanbanIssue`), vincule sub-issues (`Link-KanbanSubIssues`), adicione ao projeto 62 (`Add-KanbanItem`) e tramite: pai → `Ready`, subtarefas → `Backlog` (`Set-KanbanStatus`).
+   - Grave `.kilo/flow/<name>.json` (`Set-FlowState`) com fase `openspec-plan`, números das issues e itemIds.
+
+   Depois siga para o passo 1 abaixo, com o fluxo OpenSpec normal.
 
 1. **If no clear input provided, ask what they want to build**
 

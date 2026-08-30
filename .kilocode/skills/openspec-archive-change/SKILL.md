@@ -1,7 +1,7 @@
 ---
 name: openspec-archive-change
 description: Archive a completed change in the experimental workflow. Use when the user wants to finalize and archive a change after implementation is complete.
-allowed-tools: Bash(openspec:*)
+allowed-tools: Bash(openspec:*), Bash(git:*), Bash(gh:*)
 license: MIT
 compatibility: Requires openspec CLI.
 metadata:
@@ -152,6 +152,17 @@ Archive a completed change in the experimental workflow.
    - Archive location
    - Whether specs were synced (if applicable)
    - Note about any warnings (incomplete artifacts/tasks)
+
+7. **Entrega Git + Kanban (fluxo automatizado)**
+
+   Execute a Fase 4 (`deliver`) de `.kilo/workflows/opsx-flow.md` após o archive:
+
+   - Se `.kilo/flow/<name>.json` não existir: execute a Fase 1 (`kanban-plan`) de `.kilo/workflows/opsx-flow.md` a partir dos grupos do `tasks.md` (mostre a tabela proposta e aguarde confirmação) e, se ainda houver alterações não commitadas na working tree, separe-as por grupo do tasks.md.
+   - Carregue `. .kilo/scripts/kanban.ps1` e leia o estado.
+   - Para cada subtarefa `[NN.M]` em ordem: branch `feature/<name>-<nn.m>` a partir de master; aplicar o commit do grupo (cherry-pick se já commitado em `feature/<name>`; senão `git add` dos arquivos do grupo + commit); push; PR + `gh pr merge --merge --delete-branch` (fallback: merge direto na master + push); depois `Set-KanbanStatus ... Done` + `Close-KanbanIssue`.
+   - Pai `[NN]`: branch de integração `feature/<name>`; tramitar → `Done` + `Close-KanbanIssue` após todas as subtarefas mergeadas.
+   - Atualizar `docs/roadmap.md` e o estado (`phase="done"`).
+   - Pré-condição obrigatória: `mvn test` verde antes de qualquer merge na master.
 
 **Output On Success**
 

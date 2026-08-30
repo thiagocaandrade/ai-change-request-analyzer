@@ -1,7 +1,7 @@
 ---
 name: openspec-apply-change
 description: Implement tasks from an OpenSpec change. Use when the user wants to start implementing, continue implementation, or work through tasks.
-allowed-tools: Bash(openspec:*)
+allowed-tools: Bash(openspec:*), Bash(git:*), Bash(gh:*)
 license: MIT
 compatibility: Requires openspec CLI.
 metadata:
@@ -96,6 +96,10 @@ Implement tasks from an OpenSpec change.
    - Keep changes minimal and focused
    - Mark task complete in the tasks file: `- [ ]` → `- [x]`
    - Continue to next task
+
+   **Kanban + git (fluxo automatizado):** se `.kilo/flow/<name>.json` não existir, execute primeiro a Fase 1 (`kanban-plan`) de `.kilo/workflows/opsx-flow.md` a partir dos grupos do `tasks.md` (mostre a tabela proposta e aguarde confirmação antes de criar as issues). Depois carregue `. .kilo/scripts/kanban.ps1` e certifique-se de estar na branch `feature/<name>` (criada a partir de master; se não existir, `git checkout master` + `git checkout -b feature/<name>`). A cada grupo `## N.` do tasks.md concluído (todas as tasks do grupo `- [x]` e verificação indicada passando):
+   - Subtarefa correspondente → `InProgress` ao iniciar o grupo; → `InReview` ao concluir (`Set-KanbanStatus` com o itemId do estado)
+   - `git add -A` e `git commit -m "[NN.M] <título da subtarefa>"` (um commit por subtarefa; detalhes na Fase 3 de `.kilo/workflows/opsx-flow.md`)
 
    **Pause if:**
    - Task is unclear → ask for clarification

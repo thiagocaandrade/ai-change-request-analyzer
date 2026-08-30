@@ -8,9 +8,9 @@ Orquestra o ciclo inteiro de uma change: cria tarefas/subtarefas no Kanban GitHu
 
 1. `preflight` — ambiente e git limpo
 2. `kanban-plan` — cria tarefa pai `[NN]` + subtarefas `[NN.M]` no Kanban
-3. `openspec-plan` — `/opsx:new` + `/opsx:ff`, tasks.md espelha as subtarefas do Kanban
+3. `openspec-plan` — `/opsx-new` + `/opsx-ff`, tasks.md espelha as subtarefas do Kanban
 4. `apply` — implementa, tramita subtarefas, commit por grupo
-5. `deliver` — após `/opsx:archive`: branches por tarefa/subtarefa, commit, merge na master, Kanban → Done
+5. `deliver` — após `/opsx-archive`: branches por tarefa/subtarefa, commit, merge na master, Kanban → Done
 
 Regras não-negociáveis: nunca commitar secrets; CI (`mvn test`) verde antes de `deliver`; uma change = uma tarefa pai; o LLM apenas propõe a decomposição — só criar issues depois de confirmar com o usuário.
 
@@ -40,8 +40,7 @@ Regras não-negociáveis: nunca commitar secrets; CI (`mvn test`) verde antes de
 ## Fase 2 — openspec-plan
 
 1. Mover pai para `InProgress` (tramitar a tarefa): `Set-KanbanStatus`.
-2. Executar o fluxo OpenSpec de planejamento: carregar e seguir o skill `openspec-new-change` (com o nome da change) e depois `openspec-ff-change` (ou `openspec-continue-change`).
-3. **tasks.md espelha o Kanban**: cada grupo `## N. <título>` do tasks.md DEVE corresponder 1:1 a uma subtarefa `[NN.N]` do Kanban. Se a decomposição mudar durante o planejamento, reconciliar: `gh issue edit <n> --title "<novo título>"` e atualizar o estado em `.kilo/flow/<change>.json`.
+2. Executar o fluxo OpenSpec de planejamento: carregar e seguir o skill `openspec-new-change` (com o nome da change) e depois `openspec-ff-change` (ou `openspec-continue-change`).3. **tasks.md espelha o Kanban**: cada grupo `## N. <título>` do tasks.md DEVE corresponder 1:1 a uma subtarefa `[NN.N]` do Kanban. Se a decomposição mudar durante o planejamento, reconciliar: `gh issue edit <n> --title "<novo título>"` e atualizar o estado em `.kilo/flow/<change>.json`.
 4. Revisão humana dos 4 artefatos (pausar).
 5. Criar a branch de integração: `git checkout master` + `git checkout -b feature/<change>`. (Todo o apply acontece nesta branch; master permanece limpa.)
 6. Atualizar estado: `phase="apply"`.
