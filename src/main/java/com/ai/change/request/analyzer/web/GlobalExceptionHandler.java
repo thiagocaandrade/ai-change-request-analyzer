@@ -35,6 +35,11 @@ public class GlobalExceptionHandler {
     return build(HttpStatus.CONFLICT, "approval_conflict", e.getMessage());
   }
 
+  @ExceptionHandler(TraceNotFoundException.class)
+  ResponseEntity<ErrorResponse> handleTraceNotFound(TraceNotFoundException e) {
+    return build(HttpStatus.NOT_FOUND, "trace_not_found", e.getMessage());
+  }
+
   @ExceptionHandler(MethodArgumentNotValidException.class)
   ResponseEntity<ErrorResponse> handleValidation(MethodArgumentNotValidException e) {
     String detail =
@@ -90,6 +95,12 @@ public class GlobalExceptionHandler {
   public static class ApprovalConflictException extends RuntimeException {
     public ApprovalConflictException(UUID id) {
       super("aprovacao nao esta PENDING ou nao e exigida para a solicitacao: " + id);
+    }
+  }
+
+  public static class TraceNotFoundException extends RuntimeException {
+    public TraceNotFoundException(String traceId) {
+      super("nenhum evento registrado para o trace: " + traceId);
     }
   }
 }

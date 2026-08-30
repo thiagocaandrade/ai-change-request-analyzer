@@ -9,6 +9,7 @@ import com.ai.change.request.analyzer.domain.ChangeRequest;
 import com.ai.change.request.analyzer.domain.ChangeRequestRepository;
 import com.ai.change.request.analyzer.domain.ChangeRequestStatus;
 import com.ai.change.request.analyzer.domain.RiskAssessment;
+import com.ai.change.request.analyzer.observability.TraceService;
 import com.ai.change.request.analyzer.service.AgentResultMapper;
 import com.ai.change.request.analyzer.service.AnalysisService;
 import com.ai.change.request.analyzer.service.ApprovalService;
@@ -40,24 +41,29 @@ public class ChangeRequestController {
   private final AgentResultMapper agentResultMapper;
   private final AnalysisService analysisService;
   private final ApprovalService approvalService;
+  private final TraceService traceService;
 
   public ChangeRequestController(
       ChangeRequestRepository repository,
       AgentClient agentClient,
       AgentResultMapper agentResultMapper,
       AnalysisService analysisService,
-      ApprovalService approvalService) {
+      ApprovalService approvalService,
+      TraceService traceService) {
     this.repository = repository;
     this.agentClient = agentClient;
     this.agentResultMapper = agentResultMapper;
     this.analysisService = analysisService;
     this.approvalService = approvalService;
+    this.traceService = traceService;
   }
 
   @PostMapping
   public ResponseEntity<ChangeRequestResponse> create(
       @Valid @RequestBody CreateChangeRequestRequest body, HttpServletRequest httpRequest) {
+    long start = System.nanoTime();
     String traceId = (String) httpRequest.getAttribute(TraceIdFilter.TRACE_ID_ATTRIBUTE);
+    traceService.record("pipeline", "analysis_started");
     ChangeRequest request = new ChangeRequest();
     request.setText(body.text());
     request.setTraceId(traceId);
@@ -70,9 +76,29 @@ public class ChangeRequestController {
       analysisService.persistAnalysis(
           request, analysis, agentResultMapper.toSecurityEvents(agentResponse.result()));
       request.setStatus(ChangeRequestStatus.COMPLETED);
+      traceService.record(
+          "pipeline",
+          "analysis_completed",
+          TraceService.elapsedMs(start),
+          "ok",
+          null,
+          analysis.getRiskAssessment() != null
+              ? analysis.getRiskAssessment().getLevel().name()
+              : null,
+          null,
+          null);
     } catch (AgentUnavailableException e) {
       request.setStatus(ChangeRequestStatus.FAILED);
       request.setFailureReason("agent_unavailable: " + e.getMessage());
+      traceService.record(
+          "pipeline",
+          "analysis_failed",
+          TraceService.elapsedMs(start),
+          "failed",
+          "agent_unavailable",
+          null,
+          null,
+          null);
     }
     repository.save(request);
     log.info("request_persisted id={} status={}", request.getId(), request.getStatus());

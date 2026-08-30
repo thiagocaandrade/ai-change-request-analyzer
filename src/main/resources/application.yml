@@ -43,6 +43,11 @@ ai:
     top-k: ${AI_RAG_TOP_K:4}
     similarity-threshold: ${AI_RAG_SIMILARITY_THRESHOLD:0.7}
     knowledge-path: ${AI_RAG_KNOWLEDGE_PATH:knowledge}
+    timeout-ms: ${AI_RAG_TIMEOUT_MS:5000}
+
+resilience:
+  backoff-ms: ${RESILIENCE_BACKOFF_MS:200}
+  max-backoff-ms: ${RESILIENCE_MAX_BACKOFF_MS:2000}
 
 tools:
   repo-root: ${TOOLS_REPO_ROOT:}
@@ -53,7 +58,7 @@ management:
   endpoints:
     web:
       exposure:
-        include: health
+        include: health,metrics
 
 # Spring AI: configurado exclusivamente por variaveis de ambiente
 # (SPRING_AI_OPENAI_API_KEY, SPRING_AI_OPENAI_BASE_URL, SPRING_AI_OPENAI_CHAT_MODEL).

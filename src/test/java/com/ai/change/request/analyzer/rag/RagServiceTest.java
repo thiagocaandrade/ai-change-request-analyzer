@@ -6,10 +6,15 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.ai.change.request.analyzer.observability.TraceEventRepository;
+import com.ai.change.request.analyzer.observability.TraceService;
+import com.ai.change.request.analyzer.resilience.ResilienceExecutor;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.mockito.Mockito;
 import org.springframework.ai.document.Document;
 import org.springframework.ai.vectorstore.SearchRequest;
 import org.springframework.ai.vectorstore.VectorStore;
@@ -18,6 +23,10 @@ import org.springframework.beans.factory.ObjectProvider;
 class RagServiceTest {
 
   private RagService serviceWith(VectorStore store) {
+    return serviceWith(store, 5000);
+  }
+
+  private RagService serviceWith(VectorStore store, long timeoutMs) {
     ObjectProvider<VectorStore> provider =
         new ObjectProvider<>() {
           @Override
@@ -40,7 +49,9 @@ class RagServiceTest {
             return store;
           }
         };
-    return new RagService(provider, 4, 0.7);
+    TraceService traceService = new TraceService(Mockito.mock(TraceEventRepository.class));
+    ResilienceExecutor executor = new ResilienceExecutor(traceService, 0, 10);
+    return new RagService(provider, 4, 0.7, executor, traceService, timeoutMs);
   }
 
   private Document document(String id, double score, String source) {
@@ -102,11 +113,8 @@ class RagServiceTest {
   }
 
   @Test
-  void failureReturnsEmptyMarkedResult() {
-    VectorStore store = mock(VectorStore.class);
-    when(store.similaritySearch(any(SearchRequest.class)))
-        .thenThrow(new IllegalStateException("pgvector fora"));
-    RagService service = serviceWith(store);
+  void missingStoreReturnsEmptyMarkedResult() {
+    RagService service = serviceWith(null);
 
     RagService.KnowledgeSearchResult result = service.search("query");
 
@@ -115,8 +123,56 @@ class RagServiceTest {
   }
 
   @Test
-  void missingStoreReturnsEmptyMarkedResult() {
-    RagService service = serviceWith(null);
+  void transientFailureRecoversWithinRetryLimit() {
+    VectorStore store = mock(VectorStore.class);
+    AtomicInteger calls = new AtomicInteger();
+    when(store.similaritySearch(any(SearchRequest.class)))
+        .thenAnswer(
+            invocation -> {
+              if (calls.incrementAndGet() == 1) {
+                throw new IllegalStateException("pgvector transiente");
+              }
+              return List.of(document("d-0", 0.92, "discount-policy.md"));
+            });
+    RagService service = serviceWith(store);
+
+    RagService.KnowledgeSearchResult result = service.search("desconto VIP");
+
+    assertThat(calls.get()).isEqualTo(2);
+    assertThat(result.degraded()).isFalse();
+    assertThat(result.hits()).hasSize(1);
+  }
+
+  @Test
+  void timeoutExhaustsRetriesAndReturnsEmptyMarkedResult() {
+    VectorStore store = mock(VectorStore.class);
+    AtomicInteger calls = new AtomicInteger();
+    when(store.similaritySearch(any(SearchRequest.class)))
+        .thenAnswer(
+            invocation -> {
+              calls.incrementAndGet();
+              try {
+                Thread.sleep(300);
+              } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+              }
+              return List.of(document("d-0", 0.92, "discount-policy.md"));
+            });
+    RagService service = serviceWith(store, 80);
+
+    RagService.KnowledgeSearchResult result = service.search("desconto VIP");
+
+    assertThat(calls.get()).isEqualTo(3);
+    assertThat(result.degraded()).isTrue();
+    assertThat(result.hits()).isEmpty();
+  }
+
+  @Test
+  void persistentFailureUsesMarkedFallbackWithoutInterruptingAnalysis() {
+    VectorStore store = mock(VectorStore.class);
+    when(store.similaritySearch(any(SearchRequest.class)))
+        .thenThrow(new IllegalStateException("pgvector fora"));
+    RagService service = serviceWith(store);
 
     RagService.KnowledgeSearchResult result = service.search("query");
 

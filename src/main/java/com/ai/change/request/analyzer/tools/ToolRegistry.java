@@ -1,5 +1,7 @@
 package com.ai.change.request.analyzer.tools;
 
+import com.ai.change.request.analyzer.observability.AnalysisMetrics;
+import com.ai.change.request.analyzer.resilience.ResilienceExecutor;
 import java.util.List;
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.ai.tool.definition.ToolDefinition;
@@ -7,8 +9,8 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 /**
- * Registro unico das 4 tools, todas embrulhadas com timeout/retry/logs de trace_id. O ChatClient e
- * o servidor MCP usam estes mesmos callbacks.
+ * Registro unico das 4 tools, todas embrulhadas com timeout/retry/backoff/logs de trace_id (via
+ * {@link ResilienceExecutor}). O ChatClient e o servidor MCP usam estes mesmos callbacks.
  */
 @Component
 public class ToolRegistry {
@@ -20,13 +22,15 @@ public class ToolRegistry {
       GetFileTool getFileTool,
       SearchChangeHistoryTool searchChangeHistoryTool,
       GetRelatedTestsTool getRelatedTestsTool,
+      ResilienceExecutor resilienceExecutor,
+      AnalysisMetrics metrics,
       @Value("${tools.timeout-ms:5000}") long timeoutMs) {
     this.callbacks =
         List.of(
-            resilient(searchCodeTool, timeoutMs),
-            resilient(getFileTool, timeoutMs),
-            resilient(searchChangeHistoryTool, timeoutMs),
-            resilient(getRelatedTestsTool, timeoutMs));
+            resilient(searchCodeTool, timeoutMs, resilienceExecutor, metrics),
+            resilient(getFileTool, timeoutMs, resilienceExecutor, metrics),
+            resilient(searchChangeHistoryTool, timeoutMs, resilienceExecutor, metrics),
+            resilient(getRelatedTestsTool, timeoutMs, resilienceExecutor, metrics));
   }
 
   public List<ToolCallback> callbacks() {
@@ -40,8 +44,12 @@ public class ToolRegistry {
         .orElseThrow(() -> new IllegalArgumentException("tool desconhecida: " + name));
   }
 
-  private static ToolCallback resilient(AnalysisTool tool, long timeoutMs) {
-    return new ResilientToolCallback(adapt(tool), timeoutMs);
+  private static ToolCallback resilient(
+      AnalysisTool tool,
+      long timeoutMs,
+      ResilienceExecutor resilienceExecutor,
+      AnalysisMetrics metrics) {
+    return new ResilientToolCallback(adapt(tool), timeoutMs, resilienceExecutor, metrics);
   }
 
   private static ToolCallback adapt(AnalysisTool tool) {

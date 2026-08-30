@@ -62,6 +62,30 @@ class TraceIdLoggingTest {
     assertThat(first).isNotEqualTo(second);
   }
 
+  @Test
+  void requestLogsCarryStandardizedFieldsAndRequestId() throws Exception {
+    ListAppender<ILoggingEvent> appender = attachAppender();
+    try {
+      mockMvc.perform(MockMvcRequestBuilders.get("/any-path")).andReturn();
+
+      assertThat(appender.list)
+          .anyMatch(
+              e ->
+                  e.getFormattedMessage().contains("node=http")
+                      && e.getFormattedMessage().contains("event=request_started")
+                      && e.getMDCPropertyMap().get("request_id") != null
+                      && e.getMDCPropertyMap().get("trace_id") != null);
+      assertThat(appender.list)
+          .anyMatch(
+              e ->
+                  e.getFormattedMessage().contains("event=request_finished")
+                      && e.getFormattedMessage().contains("status=")
+                      && e.getFormattedMessage().contains("duration_ms="));
+    } finally {
+      detachAppender(appender);
+    }
+  }
+
   private ListAppender<ILoggingEvent> attachAppender() {
     Logger root = (Logger) LoggerFactory.getLogger(Logger.ROOT_LOGGER_NAME);
     ListAppender<ILoggingEvent> appender = new ListAppender<>();

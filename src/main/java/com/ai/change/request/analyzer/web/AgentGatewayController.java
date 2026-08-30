@@ -11,6 +11,7 @@ import com.ai.change.request.analyzer.ai.dto.AiResults.TestPlanResult;
 import com.ai.change.request.analyzer.ai.dto.AiResults.TestRecommendationDto;
 import com.ai.change.request.analyzer.domain.ChangeRequestRepository;
 import com.ai.change.request.analyzer.memory.AnalysisMemoryService;
+import com.ai.change.request.analyzer.observability.TraceService;
 import com.ai.change.request.analyzer.rag.RagService;
 import com.ai.change.request.analyzer.security.SecurityAssessmentService;
 import com.ai.change.request.analyzer.security.SecurityAssessmentService.SecurityEvent;
@@ -66,6 +67,7 @@ public class AgentGatewayController {
   private final EvidenceRenderer evidenceRenderer;
   private final SecurityAssessmentService securityAssessmentService;
   private final ChangeRequestRepository changeRequestRepository;
+  private final TraceService traceService;
 
   public AgentGatewayController(
       AiAnalysisService aiAnalysisService,
@@ -74,7 +76,8 @@ public class AgentGatewayController {
       AnalysisMemoryService memoryService,
       EvidenceRenderer evidenceRenderer,
       SecurityAssessmentService securityAssessmentService,
-      ChangeRequestRepository changeRequestRepository) {
+      ChangeRequestRepository changeRequestRepository,
+      TraceService traceService) {
     this.aiAnalysisService = aiAnalysisService;
     this.codeEvidenceService = codeEvidenceService;
     this.ragService = ragService;
@@ -82,17 +85,22 @@ public class AgentGatewayController {
     this.evidenceRenderer = evidenceRenderer;
     this.securityAssessmentService = securityAssessmentService;
     this.changeRequestRepository = changeRequestRepository;
+    this.traceService = traceService;
   }
 
   @PostMapping("/classify")
   public ClassifyResponse classify(@Valid @RequestBody TextRequest body) {
+    long start = System.nanoTime();
+    traceService.record("classify", "started");
     ClassificationResult result = aiAnalysisService.classify(body.changeText());
-    logEndpoint("classify", result.degraded());
+    recordCompleted("classify", start, result.degraded());
     return new ClassifyResponse(result.category(), result.notes(), result.degraded());
   }
 
   @PostMapping("/analyze-code")
   public AnalyzeCodeResponse analyzeCode(@Valid @RequestBody TextRequest body) {
+    long start = System.nanoTime();
+    traceService.record("analyze-code", "started");
     CodeEvidenceService.CodeEvidence evidence = codeEvidenceService.analyzeCode(body.changeText());
     List<CodeFinding> findings =
         evidence.findings().stream()
@@ -109,12 +117,14 @@ public class AgentGatewayController {
         body.requestId(),
         findings.stream().map(CodeFinding::description).toList(),
         SecurityAssessmentService.SOURCE_CODE);
-    logEndpoint("analyze-code", evidence.degraded());
+    recordCompleted("analyze-code", start, evidence.degraded());
     return new AnalyzeCodeResponse(findings, evidence.degraded());
   }
 
   @PostMapping("/retrieve-knowledge")
   public RetrieveKnowledgeResponse retrieveKnowledge(@Valid @RequestBody TextRequest body) {
+    long start = System.nanoTime();
+    traceService.record("retrieve-knowledge", "started");
     RagService.KnowledgeSearchResult result = ragService.search(body.changeText());
     List<KnowledgeHit> documents =
         result.hits().stream()
@@ -127,12 +137,14 @@ public class AgentGatewayController {
         body.requestId(),
         documents.stream().map(KnowledgeHit::content).toList(),
         SecurityAssessmentService.SOURCE_KNOWLEDGE);
-    logEndpoint("retrieve-knowledge", result.degraded());
+    recordCompleted("retrieve-knowledge", start, result.degraded());
     return new RetrieveKnowledgeResponse(documents, result.degraded());
   }
 
   @PostMapping("/retrieve-history")
   public RetrieveHistoryResponse retrieveHistory(@Valid @RequestBody TextRequest body) {
+    long start = System.nanoTime();
+    traceService.record("retrieve-history", "started");
     AnalysisMemoryService.HistorySearchResult result =
         memoryService.searchByTerms(body.changeText());
     List<HistoryHit> findings =
@@ -141,7 +153,7 @@ public class AgentGatewayController {
         body.requestId(),
         findings.stream().map(HistoryHit::summary).toList(),
         SecurityAssessmentService.SOURCE_HISTORY);
-    logEndpoint("retrieve-history", result.degraded());
+    recordCompleted("retrieve-history", start, result.degraded());
     return new RetrieveHistoryResponse(findings, result.degraded());
   }
 
@@ -153,6 +165,8 @@ public class AgentGatewayController {
   @PostMapping("/security-assessment")
   public SecurityAssessmentDto securityAssessment(
       @Valid @RequestBody SecurityAssessmentRequest body) {
+    long start = System.nanoTime();
+    traceService.record("security-assessment", "started");
     SecurityAnalysisResult suggestion = aiAnalysisService.analyzeSecurity(body.changeText(), "");
     List<SecurityEvent> events =
         securityAssessmentService.assess(
@@ -160,30 +174,42 @@ public class AgentGatewayController {
             SecurityAssessmentService.SOURCE_REQUEST_TEXT,
             suggestion.findings());
     persistEvents(body.requestId(), events);
-    logEndpoint("security-assessment", suggestion.degraded());
+    recordCompleted("security-assessment", start, suggestion.degraded());
     return toSecurityAssessmentDto(events);
   }
 
   @PostMapping("/analyze-impact")
   public AnalyzeImpactResponse analyzeImpact(@Valid @RequestBody EvidenceRequest body) {
+    long start = System.nanoTime();
+    traceService.record("analyze-impact", "started");
     String evidence =
         evidenceRenderer.render(
             body.codeFindings(), body.retrievedDocuments(), body.historicalFindings());
     ImpactAnalysisResult result = aiAnalysisService.analyzeImpact(body.changeText(), evidence);
     List<ImpactFinding> findings = result.findings().stream().map(this::toImpactFinding).toList();
-    logEndpoint("analyze-impact", result.degraded());
+    recordCompleted("analyze-impact", start, result.degraded());
     return new AnalyzeImpactResponse(findings, result.degraded());
   }
 
   @PostMapping("/assess-risk")
   public AssessRiskResponse assessRisk(@Valid @RequestBody AssessRiskRequest body) {
+    long start = System.nanoTime();
+    traceService.record("assess-risk", "started");
     String evidence =
         evidenceRenderer.renderSections(
             Map.of(
                 "CLASSIFICACAO", listOrEmpty(body.classification()),
                 "IMPACTO", listOrEmpty(body.impactFindings())));
     RiskAnalysisResult result = aiAnalysisService.assessRisk(body.changeText(), evidence);
-    logEndpoint("assess-risk", result.degraded());
+    traceService.record(
+        "assess-risk",
+        "completed",
+        TraceService.elapsedMs(start),
+        result.degraded() ? "degraded" : "ok",
+        null,
+        result.level(),
+        null,
+        null);
     return new AssessRiskResponse(
         result.level(), result.confidence(), result.rationale(), result.degraded());
   }
@@ -191,6 +217,8 @@ public class AgentGatewayController {
   @PostMapping("/generate-test-plan")
   public GenerateTestPlanResponse generateTestPlan(
       @Valid @RequestBody GenerateTestPlanRequest body) {
+    long start = System.nanoTime();
+    traceService.record("generate-test-plan", "started");
     String evidence =
         evidenceRenderer.renderSections(
             Map.of(
@@ -200,7 +228,7 @@ public class AgentGatewayController {
     TestPlanResult result = aiAnalysisService.generateTestPlan(body.changeText(), evidence);
     List<TestRecommendation> recommendations =
         result.recommendations().stream().map(this::toRecommendation).toList();
-    logEndpoint("generate-test-plan", result.degraded());
+    recordCompleted("generate-test-plan", start, result.degraded());
     return new GenerateTestPlanResponse(recommendations, result.degraded());
   }
 
@@ -259,11 +287,15 @@ public class AgentGatewayController {
     return List.of();
   }
 
-  private void logEndpoint(String endpoint, boolean degraded) {
-    log.info(
-        "agent_endpoint_completed endpoint={} degraded={} trace_id={}",
-        endpoint,
-        degraded,
-        MDC.get("trace_id"));
+  private void recordCompleted(String node, long start, boolean degraded) {
+    traceService.record(
+        node,
+        "completed",
+        TraceService.elapsedMs(start),
+        degraded ? "degraded" : "ok",
+        null,
+        null,
+        null,
+        null);
   }
 }

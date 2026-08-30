@@ -2,7 +2,7 @@
 
 Aplicação acadêmica que recebe uma solicitação de alteração em software e produz uma análise estruturada de impacto, risco e testes. O agente **não** altera código automaticamente.
 
-Caminho executável de ponta a ponta: fundação (`foundation`), domínio e API (`domain-and-api`), orquestração LangGraph completa (`langgraph-orchestration`), **IA, tools, RAG e memória reais** (`ai-rag-memory-tools`) e **segurança + aprovação humana** (`security-and-human-approval`): detecção determinística de prompt injection com eventos persistidos, análise de segurança assistida por LLM com prompt versionado e endpoint de decisão humana para análises de risco HIGH. As changes 06+ seguem em `docs/roadmap.md`.
+Caminho executável de ponta a ponta: fundação (`foundation`), domínio e API (`domain-and-api`), orquestração LangGraph completa (`langgraph-orchestration`), **IA, tools, RAG e memória reais** (`ai-rag-memory-tools`), **segurança + aprovação humana** (`security-and-human-approval`) e **observabilidade + resiliência** (`observability-and-resilience`): logs JSON com campos padronizados, eventos de auditoria persistidos por execução (`GET /api/traces/{traceId}`), métricas Micrometer e política única de resiliência (timeout/retry/backoff/fallback) em LLM, MCP, RAG e tools. As changes 07+ seguem em `docs/roadmap.md`.
 
 ## Visão geral dos componentes
 
@@ -56,7 +56,7 @@ Resposta de `POST /analyze`: `{request_id, status, result}` com `status` em `com
 ## Camada IA (Spring AI)
 
 - **Prompts versionados:** `src/main/resources/prompts/<etapa>-v1.txt` (`classification`, `impact-analysis`, `risk-analysis`, `test-generation`), carregados por `PromptRegistry` (etapa + versão); nenhum prompt de produção embutido em código.
-- **Structured output validado:** `AiAnalysisService` converte a saída do LLM em records tipados (`BeanOutputConverter` + jakarta.validation), com retry limitado (máx. 2). Saída inválida é descartada — nunca persistida. Esgotado o limite → fallback determinístico marcado (`degraded=true`; risco `MEDIUM`, rationale `analysis_unavailable`).
+- **Structured output validado:** `AiAnalysisService` converte a saída do LLM em records tipados (`BeanOutputConverter` + jakarta.validation), com retry limitado (máx. 2) e backoff entre tentativas via `ResilienceExecutor`. Saída inválida é descartada — nunca persistida. Esgotado o limite → fallback determinístico marcado (`degraded=true`; risco `MEDIUM`, rationale `analysis_unavailable`). Cada tentativa é registrada em log estruturado e em evento de auditoria com `model` e `trace_id`; métricas `llm_calls` e `validation_failures`.
 - **Conteúdo recuperado é dado:** a evidência entra na seção delimitada `DADOS NÃO CONFIÁVEIS` do user message, nunca no system prompt.
 - **Sem chave, análise segue degradada:** o `ChatClient` só existe com `ai.chat.api-key`; timeout configurável (`ai.chat.timeout-ms`); segredos nunca aparecem em logs ou respostas.
 
@@ -66,14 +66,14 @@ Resposta de `POST /analyze`: `{request_id, status, result}` com `status` em `com
 
 - **Validação de entrada:** query/path/component não vazios, tamanho limitado; erro estruturado para entrada inválida.
 - **Acesso restrito:** `RepoAccessPolicy` normaliza o caminho contra a raiz configurada (`tools.repo-root`); `../`, absolutos fora da raiz e vazios são rejeitados. Nenhuma tool executa shell.
-- **Resiliência:** cada execução tem timeout (`tools.timeout-ms`), retry máx. 2 e logs com `trace_id` (`ResilientToolCallback`); falha após retries → erro registrado e a análise segue.
+- **Resiliência:** cada execução tem timeout (`tools.timeout-ms`), retry máx. 2 com backoff e registro de cada tentativa em log estruturado e evento de auditoria (`ResilientToolCallback` → `ResilienceExecutor`); falha após retries → erro registrado e a análise segue. Métricas `tool_calls`/`tool_errors`.
 - **MCP:** servidor MCP da aplicação (Spring AI, streamable HTTP em `/mcp`) expõe `search_code` e `get_file` com os mesmos callbacks. Evidência: `docs/evidence/04-mcp.png`.
 
 ## RAG (pgvector)
 
 - **Base de conhecimento:** `knowledge/` com 6 documentos (architecture, business-rules, discount-policy, coding-guidelines, testing-guidelines, security-policy), incluindo a regra VIP 10% do Cenário A.
 - **Ingestão idempotente:** migration idempotente (`PgVectorSchemaMigration`: `CREATE EXTENSION IF NOT EXISTS vector` + tabela `vector_store` + índice HNSW) e `KnowledgeIngestionService` (chunking por seção/parágrafo + embeddings + ingestão no startup **somente se a base estiver vazia** — restart não duplica).
-- **Busca com metadata:** `RagService` com top-k configurável (`ai.rag.top-k`, default 4), threshold (`ai.rag.similarity-threshold`) e resultados com `source`, `document_id`, `chunk_id` e `score`, em ordem decrescente. Falha ou base vazia → lista vazia marcada (degradada). Evidência: `docs/evidence/03-rag.png`.
+- **Busca com metadata:** `RagService` com top-k configurável (`ai.rag.top-k`, default 4), threshold (`ai.rag.similarity-threshold`) e resultados com `source`, `document_id`, `chunk_id` e `score`, em ordem decrescente. A busca executa com timeout (`ai.rag.timeout-ms`), retry limitado e backoff via `ResilienceExecutor`; falha, estouro de tempo ou base vazia → lista vazia marcada (degradada). Evidência: `docs/evidence/03-rag.png`.
 - **Embeddings configuráveis por env:** sem `ai.embedding.api-key` o RAG desativa e a análise segue degradada.
 
 ## Memória persistente
@@ -174,6 +174,10 @@ Toda configuração é fornecida por variáveis de ambiente (referência em `.en
 | `AI_RAG_TOP_K` | `4` | Número máximo de chunks retornados |
 | `AI_RAG_SIMILARITY_THRESHOLD` | `0.7` | Score mínimo de similaridade |
 | `AI_RAG_KNOWLEDGE_PATH` | `/repo/knowledge` | Diretório dos documentos de conhecimento |
+| `AI_RAG_TIMEOUT_MS` | `5000` | Timeout da busca RAG |
+| `AI_CHAT_TIMEOUT_MS` | `30000` | Timeout das chamadas ao modelo |
+| `RESILIENCE_BACKOFF_MS` | `200` | Base do backoff entre tentativas de integrações |
+| `RESILIENCE_MAX_BACKOFF_MS` | `2000` | Teto do backoff entre tentativas |
 | `TOOLS_REPO_ROOT` | `/repo` | Raiz do repositório acessível pelas tools (proteção contra path traversal) |
 
 ## Endpoints
@@ -185,7 +189,9 @@ Toda configuração é fornecida por variáveis de ambiente (referência em `.en
 | `app` | POST | `/api/change-requests/{id}/analysis` | Registra análise estruturada (achados, risco, recomendações de teste) |
 | `app` | GET | `/api/change-requests/{id}/analysis` | Consulta a análise completa tipada, incluindo avaliação de segurança |
 | `app` | POST | `/api/change-requests/{id}/approval` | Decisão humana (APPROVED\|REJECTED) para análise com aprovação exigida |
+| `app` | GET | `/api/traces/{traceId}` | Reconstrução da execução: eventos de auditoria em ordem cronológica (404 sem eventos) |
 | `app` | GET | `/actuator/health` | Health check |
+| `app` | GET | `/actuator/metrics` | Métricas Micrometer (`analysis_duration`, `llm_calls`, `tool_calls`, `tool_errors`, `high_risk_changes`, `prompt_injection_count`, `validation_failures`) |
 | `app` | POST | `/api/agent/classify` | Classificação da solicitação (IA/fallback marcado) |
 | `app` | POST | `/api/agent/analyze-code` | Evidência de código e testes via tools (com varredura de injeção) |
 | `app` | POST | `/api/agent/retrieve-knowledge` | Busca RAG com fontes e scores (com varredura de injeção) |
@@ -200,13 +206,21 @@ Toda configuração é fornecida por variáveis de ambiente (referência em `.en
 
 ## Observabilidade
 
-- `app`: gera um UUID por requisição no `TraceIdFilter`, coloca em MDC e propaga via `X-Trace-Id`; logs JSON via `logstash-logback-encoder`.
+- **Logs JSON com campos padronizados** (`logstash-logback-encoder`, sem mudanças no logback): toda linha carrega `trace_id` e `request_id` do MDC (gerados no `TraceIdFilter`, que também loga `node=http`, `event=request_started/request_finished`, `status` e `duration_ms`); componentes instrumentados emitem `node`, `event`, `duration_ms`, `status`, `error`, `risk`, `tool` e `model` — `ChangeRequestController` e `AnalysisService` (pipeline, com `risk`), `AgentGatewayController` (started/completed por endpoint do grafo), `AiAnalysisService` (`model`), `ResilientToolCallback` (`tool`), `RagService`, `AgentClient` e `ResilienceExecutor` (cada tentativa).
+- **Segundo sinal — auditoria persistida:** cada evento é gravado na tabela `trace_event` (trace_id, request_id, node, event, duration_ms, status, error, risk, tool, model, createdAt) via `TraceService`; `GET /api/traces/{traceId}` reconstrói a execução em ordem cronológica (404 para trace inexistente). Falha de persistência de telemetria é registrada e nunca derruba a análise; nenhum evento contém segredos.
+- **Métricas (terceiro sinal complementar):** `AnalysisMetrics` (Micrometer via Actuator) registra `analysis_duration`, `llm_calls`, `tool_calls`, `tool_errors`, `high_risk_changes`, `prompt_injection_count` e `validation_failures`, expostas em `/actuator/metrics`.
 - `agent`: structlog em JSON usando o `trace_id` do cabeçalho (gera um próprio se ausente).
-- Os dois sinais de observabilidade correlacionam-se pelo mesmo `trace_id`.
+- Todos os sinais correlacionam-se pelo mesmo `trace_id` — fluxo, decisões, erros e latência de uma execução são investigáveis de ponta a ponta. Evidência: `docs/evidence/07-observability.png`.
+
+## Resiliência
+
+- **Política única (`ResilienceExecutor`)** para LLM, MCP, RAG, tools e cliente do agente: timeout configurável por integração, retry limitado (1 tentativa + 2 retries), backoff crescente limitado (`resilience.backoff-ms`, `resilience.max-backoff-ms`), cada tentativa registrada em log estruturado e em `TraceEvent` com número da tentativa e erro, e fallback explícito marcado como degradado quando o limite se esgota.
+- **Falha crítica nunca escondida:** sem fallback, o executor propaga `ResilienceExhaustedException` com a causa; `AgentClient` converte em `AgentUnavailableException` → solicitação termina em estado `FAILED` com motivo estruturado (nunca sucesso simulado).
+- `AgentClient` e o servidor MCP herdam o comportamento dos mesmos callbacks resilientes das tools.
 
 ## Testes e CI
 
-- Java: `./mvnw test` (happy path, segurança/path traversal, structured output com ChatModel fake, detecção determinística de injeção, endpoint de aprovação 200/400/404/409, RAG com VectorStore mockado, memória com H2, MCP, controller `/api/agent`) e `./mvnw spotless:check`. Suíte inteira verde **sem chave de API**.
+- Java: `./mvnw test` (happy path, segurança/path traversal, structured output com ChatModel fake, detecção determinística de injeção, endpoint de aprovação 200/400/404/409, RAG com VectorStore mockado, memória com H2, MCP, controller `/api/agent`, reconstrução de trace com `TraceTest`/`TraceEndpointTest`, cenários integrados de resiliência com `ResilienceTest`, métricas com `AnalysisMetricsTest`/`MetricsInstrumentationTest`, executor com `ResilienceExecutorTest`) e `./mvnw spotless:check`. Suíte inteira verde **sem chave de API**.
 - Python (em `agent/`): `pytest` e `ruff check .` — cobre o grafo nos cenários do roadmap (happy path, high risk, prompt injection com avaliação obtida da aplicação, endpoint de segurança indisponível, tool failure, validation failure, max iteration), aplicação indisponível, paralelismo e propagação de trace_id, com client HTTP mockado.
 - E2E: `docker compose up --build` + `python scripts/smoke_test.py` — Cenário A (desconto VIP 10%→15%) e Cenário B adversário (fixture com a frase oficial de injeção → evento de segurança persistido, risco HIGH permanece PENDING, decisão humana via endpoint), com chave configurada ou fluxo degradado marcado (`analysis_unavailable`) sem chave; `trace_id` correlacionado nos logs dos dois serviços.
 - Demonstrações: `scripts/rag_demo.py` (RAG com fontes/scores), `scripts/mcp_tools_demo.py` (MCP tools/list + proteção de path), `scripts/fake_embeddings_server.py` (embeddings determinísticos locais só para demonstração), `scripts/generate_evidence.py` (gera as evidências 05/06 como placeholders até os screenshots reais da demonstração).
