@@ -327,8 +327,7 @@ class AiAnalysisServiceTest {
 
   @Test
   void analyzeLogsPersistentlyInvalidOutputFallsBackDegradedMarked() {
-    AiAnalysisService service =
-        serviceWith(new FakeChatModel(INVALID_LOG, NOT_JSON, INVALID_LOG));
+    AiAnalysisService service = serviceWith(new FakeChatModel(INVALID_LOG, NOT_JSON, INVALID_LOG));
 
     LogAnalysisResult result = service.analyzeLogs("[ERROR] falha na compilacao");
 

@@ -17,9 +17,9 @@ import org.slf4j.MDC;
 import org.springframework.stereotype.Service;
 
 /**
- * Analise assistida de logs de pipeline (build/teste): redacao de segredos, varredura deterministica
- * de instrucoes injetadas (o log e DADO NAO CONFIÁVEL), chamada ao modelo via
- * {@link AiAnalysisService} (structured output, retry limitado, fallback degradado) e persistencia do
+ * Analise assistida de logs de pipeline (build/teste): redacao de segredos, varredura
+ * deterministica de instrucoes injetadas (o log e DADO NAO CONFIÁVEL), chamada ao modelo via {@link
+ * AiAnalysisService} (structured output, retry limitado, fallback degradado) e persistencia do
  * registro correlacionado por trace_id.
  *
  * <p>A analise NUNCA altera arquivos de pipeline: produz apenas diagnostico e recomendacao para
@@ -58,7 +58,9 @@ public class LogAnalysisService {
     this.objectMapper = objectMapper;
   }
 
-  /** Resultado da analise com o JSON estruturado persistido e os eventos de seguranca detectados. */
+  /**
+   * Resultado da analise com o JSON estruturado persistido e os eventos de seguranca detectados.
+   */
   public record LogOutcome(
       UUID recordId,
       LogAnalysisResult result,
@@ -110,7 +112,9 @@ public class LogAnalysisService {
       recordId = repository.save(record).getId();
     } catch (Exception e) {
       log.warn(
-          "log_analysis_persist_failed error={} trace_id={}", e.getClass().getSimpleName(), traceId);
+          "log_analysis_persist_failed error={} trace_id={}",
+          e.getClass().getSimpleName(),
+          traceId);
       recordId = null;
     }
 
@@ -124,7 +128,8 @@ public class LogAnalysisService {
         null,
         null,
         result.failedStep());
-    return new LogOutcome(recordId, result, resultJson, securityEvents, PROMPT_LOG_ANALYSIS, traceId);
+    return new LogOutcome(
+        recordId, result, resultJson, securityEvents, PROMPT_LOG_ANALYSIS, traceId);
   }
 
   /** Redacao simples de padroes sensiveis antes do envio ao modelo (mesma regra do CI). */

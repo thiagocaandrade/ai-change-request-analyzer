@@ -65,7 +65,8 @@ class N8nWorkflowTest {
     JsonNode connections = workflow.get("connections");
 
     JsonNode webhookOut = connections.get("Webhook - Solicitação de mudança").get("main");
-    assertThat(webhookOut.get(0).get(0).get("node").asText()).isEqualTo("HTTP Request - Analisar mudança");
+    assertThat(webhookOut.get(0).get(0).get("node").asText())
+        .isEqualTo("HTTP Request - Analisar mudança");
 
     JsonNode httpOut = connections.get("HTTP Request - Analisar mudança").get("main");
     assertThat(httpOut.get(0).get(0).get("node").asText()).isEqualTo("IF - risco HIGH?");
@@ -100,8 +101,7 @@ class N8nWorkflowTest {
     JsonNode httpNode = nodeNamed(workflow, "HTTP Request - Analisar mudança");
 
     assertThat(httpNode.get("parameters").get("method").asText()).isEqualTo("POST");
-    assertThat(httpNode.get("parameters").get("url").asText())
-        .contains("/api/change-requests");
+    assertThat(httpNode.get("parameters").get("url").asText()).contains("/api/change-requests");
     assertThat(httpNode.get("parameters").get("jsonBody").asText()).contains("text");
   }
 }

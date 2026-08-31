@@ -16,7 +16,9 @@ import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 
-/** Endpoint de execucoes de pipeline: anomalia, tendencia de falha e trace events correlacionados. */
+/**
+ * Endpoint de execucoes de pipeline: anomalia, tendencia de falha e trace events correlacionados.
+ */
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
@@ -98,7 +100,8 @@ class DevOpsRunsEndpointTest {
     assertThat(nodeSequence).containsExactly("anomaly_check", "failure_trend");
     assertThat(events.get(0).getEvent()).isEqualTo("anomaly_detected");
     assertThat(events.get(0).getStatus()).isEqualTo("detected");
-    assertThat(events.get(0).getDetail()).contains("severity=HIGH", "baseline=400.0", "observed=2800.0");
+    assertThat(events.get(0).getDetail())
+        .contains("severity=HIGH", "baseline=400.0", "observed=2800.0");
     assertThat(events.get(1).getEvent()).isEqualTo("no_trend");
     assertThat(events.get(0).getTraceId()).isEqualTo(traceId);
     assertThat(events.get(1).getTraceId()).isEqualTo(traceId);

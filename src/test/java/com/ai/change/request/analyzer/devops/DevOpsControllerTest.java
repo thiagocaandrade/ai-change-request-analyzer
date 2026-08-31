@@ -64,7 +64,9 @@ class DevOpsControllerTest {
             .perform(
                 post("/api/devops/log-analysis")
                     .contentType(MediaType.APPLICATION_JSON)
-                    .content(objectMapper.writeValueAsString(java.util.Map.of("log", FAILING_BUILD_LOG))))
+                    .content(
+                        objectMapper.writeValueAsString(
+                            java.util.Map.of("log", FAILING_BUILD_LOG))))
             .andReturn();
 
     assertThat(result.getResponse().getStatus()).isEqualTo(200);
@@ -129,7 +131,8 @@ class DevOpsControllerTest {
         .perform(
             post("/api/devops/log-analysis")
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(java.util.Map.of("log", FAILING_BUILD_LOG))))
+                .content(
+                    objectMapper.writeValueAsString(java.util.Map.of("log", FAILING_BUILD_LOG))))
         .andReturn();
 
     List<String> after = checksums(pipelineFiles);
@@ -153,8 +156,7 @@ class DevOpsControllerTest {
       List<String> result = new java.util.ArrayList<>();
       for (Path file : files) {
         MessageDigest digest = MessageDigest.getInstance("SHA-256");
-        result.add(
-            file + ":" + HexFormat.of().formatHex(digest.digest(Files.readAllBytes(file))));
+        result.add(file + ":" + HexFormat.of().formatHex(digest.digest(Files.readAllBytes(file))));
       }
       return result;
     } catch (Exception e) {
