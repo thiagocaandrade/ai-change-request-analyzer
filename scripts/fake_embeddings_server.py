@@ -84,8 +84,8 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--port", type=int, default=9999)
     args = parser.parse_args()
-    server = HTTPServer(("127.0.0.1", args.port), EmbeddingsHandler)
-    print(f"fake_embeddings_server ouvindo em http://127.0.0.1:{args.port}/v1/embeddings")
+    server = HTTPServer(("0.0.0.0", args.port), EmbeddingsHandler)
+    print(f"fake_embeddings_server ouvindo em http://0.0.0.0:{args.port}/v1/embeddings")
     server.serve_forever()
 
 
