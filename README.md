@@ -2,7 +2,56 @@
 
 Aplicação acadêmica que recebe uma solicitação de alteração em software e produz uma análise estruturada de impacto, risco e testes. O agente **não** altera código automaticamente.
 
-Caminho executável de ponta a ponta: fundação (`foundation`), domínio e API (`domain-and-api`), orquestração LangGraph completa (`langgraph-orchestration`), **IA, tools, RAG e memória reais** (`ai-rag-memory-tools`), **segurança + aprovação humana** (`security-and-human-approval`), **observabilidade + resiliência** (`observability-and-resilience`): logs JSON com campos padronizados, eventos de auditoria persistidos por execução (`GET /api/traces/{traceId}`), métricas Micrometer e política única de resiliência (timeout/retry/backoff/fallback) em LLM, MCP, RAG e tools — **interface web** (`frontend`): páginas Thymeleaf de formulário, resultado com aprovação humana e trace da execução — e **DevOps inteligente** (`devops-and-n8n`): CI completo com artefatos de log analisáveis, análise de logs com IA, detecção determinística de anomalia/tendência de falha e workflow n8n exportável. A change final (`final-hardening`) segue em `docs/roadmap.md`.
+**Estado:** as 10 changes do roadmap (`docs/roadmap.md`) estão concluídas — fundação (`foundation`), domínio e API (`domain-and-api`), orquestração LangGraph completa (`langgraph-orchestration`), **IA, tools, RAG e memória reais** (`ai-rag-memory-tools`), **segurança + aprovação humana** (`security-and-human-approval`), **observabilidade + resiliência** (`observability-and-resilience`), **interface web** (`frontend`), **QA com IA** (`ai-quality-and-testing`), **DevOps inteligente** (`devops-and-n8n`) e **hardening final** (`final-hardening`). Suíte verde sem chave de API: `mvn test` (301 testes) + `pytest agent/` (52 testes) + CI no GitHub Actions.
+
+- [Demonstração](#demonstração) · [Problema de negócio](#problema-de-negócio) · [Classificação do sistema](#classificação-do-sistema) · [Estrutura do projeto](#estrutura-do-projeto)
+- [Visão geral dos componentes](#visão-geral-dos-componentes) · [Diagrama de arquitetura](#diagrama-de-arquitetura)
+- [Grafo LangGraph](#grafo-langgraph-orquestração) · [Camada IA](#camada-ia-spring-ai) · [Tools](#tools-4-executadas-na-jvm) · [RAG](#rag-pgvector) · [Memória](#memória-persistente)
+- [Segurança e aprovação humana](#segurança-prompt-injection-e-aprovação-humana) · [Interface web](#interface-web-thymeleaf) · [QA com IA](#qa-com-ia-code-review-geração-de-testes-e-risco) · [DevOps e n8n](#devops-cicd-análise-de-logs-com-ia-anomalia-e-n8n)
+- [Matriz de requisitos](#matriz-de-requisitos-contrato-do-projeto) · [Documentação e evidências](#documentação-complementar-e-evidências)
+- [Execução via Docker Compose](#execução-via-docker-compose) (inclui [Cenários A/B](#cenários-oficiais-de-demonstração-reproduzíveis)) · [Variáveis de ambiente](#variáveis-de-ambiente) · [Endpoints](#endpoints)
+- [Observabilidade](#observabilidade) · [Resiliência](#resiliência) · [Testes e CI](#testes-e-ci)
+
+## Demonstração
+
+Fluxo completo pela interface web (Cenário A): formulário → análise com grafo LangGraph, IA, tools, RAG e memória → resultado com risco HIGH e aprovação humana exigida → decisão registrada → trace da execução com documentos recuperados.
+
+**Vídeo de demonstração completo (YouTube):** https://youtu.be/3QMWBFMzuLg
+
+![Demonstração do AI Change Request Analyzer](docs/demo.gif)
+
+## Problema de negócio
+
+Solicitações de alteração chegam em linguagem natural — ex.: *"Alterar o desconto de clientes VIP de 10% para 15%"* — e o impacto não é óbvio: podem afetar regras de negócio, código, serviços, APIs, banco, testes, decisões históricas e risco operacional. O analisador ajuda o time a entender **o que** a mudança significa, **quais** componentes/regras são afetados, **qual** o risco, **quais** testes recomendar e **se** exige aprovação humana — com evidência recuperável por execução.
+
+- **Usuários:** desenvolvedores, tech leads, revisores de código e engenheiros de QA.
+- **Entrada:** uma solicitação de alteração em linguagem natural (`{text}`), com `trace_id` gerado por execução.
+- **Saída:** análise estruturada (resumo, classificação, componentes afetados, regras de negócio relevantes, evidências recuperadas, risco com justificativa e confiança, testes recomendados priorizados, exigência de aprovação, eventos de segurança e metadados de auditoria) — nunca texto livre do LLM como contrato.
+- **Limites:** o agente é **somente leitura** — não altera código, não executa shell, não acessa fora do repositório configurado e não decide sozinho ações sensíveis (risco HIGH ⇒ aprovação humana obrigatória, por regra determinística no Java).
+- **Critérios de sucesso:** dois cenários oficiais reproduzíveis (A: desconto VIP 10%→15%; B: prompt injection bloqueado), CI verde e os 41 requisitos do contrato com implementação + teste + evidência (matriz na seção final).
+
+## Classificação do sistema
+
+Sistema **híbrido / fluxo agentic** (não é um agente totalmente autônomo):
+
+- **Java (determinístico):** validação, roteamento, permissões, limites, segurança, política de risco e aprovação — o LLM sugere, a aplicação decide.
+- **LangGraph (orquestração):** grafo tipado com 13 nós, paralelização real, branching e parada explícita.
+- **LLM (raciocínio):** sumarização, interpretação de impacto, análise de código, recomendações de teste e diagnóstico de logs — sempre com structured output validado e retry limitado.
+- **Tools (acesso controlado):** 4 ferramentas read-only sobre o repositório configurado, expostas ao modelo via tool calling e via MCP, com proteção contra path traversal.
+
+## Estrutura do projeto
+
+| Caminho | Conteúdo |
+|---|---|
+| `src/main/java/` | Aplicação Spring Boot: domínio, controllers REST, camada IA (`AiAnalysisService` + prompts versionados), `tools/`, `rag/`, `security/`, `qa/`, `devops/`, `observability/`, `resilience/`, `web/` (Thymeleaf) |
+| `src/main/resources/prompts/` | Prompts versionados (`<etapa>-v<N>.txt`) |
+| `agent/` | Sidecar Python (FastAPI + LangGraph): grafo com 13 nós, estado tipado, client HTTP com timeout/retry |
+| `knowledge/` | Base de conhecimento RAG (6 documentos) |
+| `docs/` | Contrato do projeto, roadmap das 10 changes, refinamento de prompt, evidências (`docs/evidence/`) |
+| `scripts/` | Smoke test E2E, demos RAG/MCP, experimento de prompts, redação de logs, geração de evidências |
+| `n8n/` | Workflow low-code exportável + documentação de reprodução |
+| `openspec/` | Specs e histórico das changes (source of truth do processo) |
+| `.github/workflows/ci.yml` | CI: compile → unit → integration → quality → Docker + jobs agent/e2e |
 
 ## Visão geral dos componentes
 
@@ -145,6 +194,7 @@ A change 09 completa os requisitos de DevOps do contrato do projeto: pipeline de
 ### Integração n8n (low-code)
 
 - `n8n/workflow.json` exportável: **Webhook** → **HTTP Request** `POST /api/change-requests` → **IF** `analysis.riskLevel == HIGH` → **notificação**; riscos LOW/MEDIUM concluem sem notificação. O workflow contém apenas integração/roteamento — o risco é calculado no Spring Boot e o n8n apenas repassa o campo. Documentação completa (trigger, endpoint, payload, resposta, condição, saída, evidência) em `n8n/README.md`; importação manual documentada (nenhum servidor n8n no compose). Evidência: `docs/evidence/13-n8n.png`.
+- **Reprodução:** `docker run -it --rm -p 5678:5678 n8nio/n8n` → *Workflows* → *Import from File* (`n8n/workflow.json`) → ativar e copiar a URL do webhook → disparar com `{"text":"Alterar o desconto de clientes VIP de 10% para 15%"}` (risco HIGH ⇒ notificação; payload LOW/MEDIUM ⇒ conclusão silenciosa). O backend responde em `http://host.docker.internal:8080`.
 
 Matriz desta change:
 
@@ -202,15 +252,25 @@ Matriz final Requisito → Implementação → Evidência → Teste → Risco, g
 | 38 | Histórico git coerente (branches + commits semânticos) | `feature/<change>-<nn.m>` + commits `[NN.M] título` + merges na master | `git log` | — | Nenhum relevante |
 | 39 | Workflow main/develop/feature | master + `feature/*` (workflow simplificado documentado no AGENTS.md; sem branch `develop`) | `git log` | — | Divergência com o exemplo do contrato (§30), aceita e documentada no AGENTS.md |
 | 40 | Evidências técnicas organizadas | `docs/evidence/` com 14 arquivos, um por requisito demonstrável | `docs/evidence/` | — | Algumas capturas são placeholders regeneráveis (05/06, 02/10/14) até a captura final da demonstração |
-| 41 | Vídeo de demonstração | Roteiro completo em `docs/roadmap.md` (§Roteiro do vídeo) | pendente | — | **Pendente de gravação** (fora do código; roteiro pronto) |
+| 41 | Vídeo de demonstração | Roteiro em `docs/roadmap.md` (§Roteiro do vídeo); vídeo publicado em https://youtu.be/3QMWBFMzuLg | https://youtu.be/3QMWBFMzuLg | — | Nenhum relevante |
 
 ### Conclusão da auditoria (change `final-hardening`)
 
 Auditoria executada contra o contrato do projeto (`docs/AI_CHANGE_REQUEST_ANALYZER_PROJECT_CONTRACT.md`) e as specs de `openspec/specs/` em 2026-08-30:
 
 - **Nenhum defeito de código ou especificação** foi encontrado que exija nova change OpenSpec — todos os requisitos têm implementação, teste e evidência (matriz acima); `mvn test` (301 testes) e `pytest agent/` (52 testes) verdes, CI verde na master.
-- **Itens residuais fora do código** (não são defeitos; não geram changes): gravação do vídeo de demonstração (roteiro pronto em `docs/roadmap.md`); captura final dos screenshots reais das evidências 05/06/14 na demonstração (placeholders regeneráveis via `scripts/generate_evidence.py`); workflow de branch master+`feature/*` (sem `develop`), divergência do exemplo do contrato aceita e documentada no AGENTS.md.
+- **Itens residuais fora do código** (não são defeitos; não geram changes): vídeo de demonstração publicado (https://youtu.be/3QMWBFMzuLg; roteiro em `docs/roadmap.md`); captura final dos screenshots reais das evidências 05/06/14 na demonstração (placeholders regeneráveis via `scripts/generate_evidence.py`); workflow de branch master+`feature/*` (sem `develop`), divergência do exemplo do contrato aceita e documentada no AGENTS.md.
 - **Execução de experimento com modelo real** (`scripts/prompt_experiment.py`): depende de `AI_API_KEY`; sem chave, a decisão da v2 do prompt de risco está sustentada pela comparação determinística documentada em `docs/prompt-refinement.md`.
+
+## Documentação complementar e evidências
+
+- **Contrato do projeto** (os 41 requisitos de avaliação): `docs/AI_CHANGE_REQUEST_ANALYZER_PROJECT_CONTRACT.md`.
+- **Roadmap das 10 changes OpenSpec** (status, detalhes técnicos por change e roteiro do vídeo de demonstração de 8–10 min): `docs/roadmap.md`.
+- **Ciclo de refinamento de prompt** (risk-analysis v1 → v2, experimento nos mesmos casos e decisão com evidência): `docs/prompt-refinement.md`.
+- **Workflow n8n** (importação, trigger, payload, condição, saída e cenários): `n8n/README.md`.
+- **Processo de desenvolvimento** (fluxo OpenSpec + Kanban GitHub + Git): `guia.md` e `AGENTS.md`.
+- **Evidências técnicas** — uma objetiva por requisito em `docs/evidence/`: `01-langgraph.png` a `14-prompt-refinement.png` (lista completa no roadmap). Capturas regeneráveis via `scripts/generate_evidence.py`, `.kilo/scripts/frontend-evidence.ps1` e `.kilo/scripts/qa-evidence.ps1`.
+- **Vídeo de demonstração:** publicado em https://youtu.be/3QMWBFMzuLg; roteiro completo por minuto em `docs/roadmap.md` (§Roteiro do vídeo), cobrindo problema, arquitetura, Cenários A/B, observabilidade, QA, CI, anomalia e n8n.
 
 ## Execução via Docker Compose
 
@@ -269,6 +329,19 @@ curl -X POST http://localhost:8080/api/change-requests/<id>/approval \
 ```
 
 A resposta devolve o estado atualizado (`APPROVED` ou `REJECTED`) com `approver`, `decision`, `decidedAt` e `traceId`. Decisão fora de `PENDING` (ou sem aprovação exigida) retorna 409; payload inválido 400; identificador inexistente 404.
+
+### Cenários oficiais de demonstração (reproduzíveis)
+
+O smoke test sobe a stack, executa os dois cenários exigidos pelo contrato de ponta a ponta e valida as asserções:
+
+```bash
+python scripts/smoke_test.py
+```
+
+- **Cenário A (fluxo principal):** `Alterar o desconto de clientes VIP de 10% para 15%` → grafo LangGraph executa, RAG retorna a regra atual (`knowledge/discount-policy.md`), código/testes/histórico são analisados, impacto e risco calculados (HIGH, regra financeira), testes recomendados e resultado estruturado persistido — `trace_id` correlacionado nos logs dos dois serviços.
+- **Cenário B (adversário):** fixture com a frase oficial de injeção no repositório → injeção detectada e **ignorada**, evento de segurança persistido na análise, risco permanece HIGH, aprovação `PENDING` até decisão humana (`APPROVED`/`REJECTED` via endpoint) — nenhuma instrução injetada é seguida e nenhum segredo é revelado.
+
+Sem chave de IA, os cenários rodam em modo degradado marcado (`analysis_unavailable`); com `AI_API_KEY` (e `AI_EMBEDDING_API_KEY` para RAG real), o fluxo completo usa o modelo configurado. O resumo da execução fica em `docs/evidence/e2e-smoke-summary.json` (evidência `10-e2e.png`).
 
 ## Variáveis de ambiente
 

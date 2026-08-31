@@ -95,6 +95,8 @@ Plano consolidado das fases originais (chat) em **10 changes OpenSpec**, na orde
 
 0:00 problema (mudanças simples afetam regras, código e testes) → 0:40 arquitetura (Thymeleaf → Spring → LangGraph → RAG/Tools/Memory → Risk → Approval) → 1:30 Cenário A (VIP 10%→15%, grafo executando) → 3:00 RAG+Tools+Memory → 4:00 Risk+HIGH→approval → 4:45 Cenário B (injeção bloqueada) → 5:30 observabilidade (trace_id, nós, latência, tools, erros) → 6:15 QA com IA (PR → review → teste ausente) → 7:00 CI → 7:30 anomalia (400ms→2800ms) → 8:00 n8n (webhook → agente → HIGH → notificação) → 8:30 encerramento com a matriz de requisitos.
 
+**Vídeo publicado no YouTube:** https://youtu.be/3QMWBFMzuLg
+
 ## Checklist de auditoria final
 
 LangGraph, State, Nodes, Edges, sequencial, paralelização, branching, condição de parada, tool, MCP, validação, tratamento de erro, memória, RAG, prompt injection, proteção de secrets, limite de autonomia, human approval, logs estruturados, segundo sinal observável, trace_id, timeout, retry, fallback, AI code review, AI test generation, unit/integration/E2E, risk-based testing, CI, AI log analysis, anomaly detection, failure trend, n8n, prompts versionados, prompt refinement, model via environment.
