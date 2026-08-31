@@ -8,10 +8,10 @@
 
 ## 2. Análise de logs de build/teste com IA
 
-- [ ] 2.1 Adicionar estágio `LOG_ANALYSIS` ao enum `AnalysisStage`, criar o prompt versionado `resources/prompts/log-analysis-v1.txt` (schema JSON com summary, failedStep, probableCause, evidence, recommendedAction, confidence; seção `DADOS NÃO CONFIÁVEIS` para o conteúdo do log) e o DTO tipado `LogAnalysisResult` em `ai/dto/AiResults`; verificar teste de que o prompt é carregado por versão e `mvn test` verde
-- [ ] 2.2 Implementar `devops/LogAnalysisService` reusando `AiAnalysisService.generate()` (structured output, validação, retry máx. 2, fallback degradado marcado, trace event e métrica) com redação de segredos antes do envio; verificar testes unitários: saída válida convertida, saída inválida com retry limitado e fallback sem modelo configurado
-- [ ] 2.3 Criar entidade `LogAnalysisRecord` + repositório (H2) e endpoint `POST /api/devops/log-analysis` em `DevOpsController`; verificar teste MockMvc: 200 com diagnóstico estruturado, registro persistido com promptVersion/resultJson/degraded/traceId e instrução injetada no log ignorada
-- [ ] 2.4 Garantir que a análise de logs nunca altera o pipeline: verificar teste que executa a análise e compara os arquivos do repositório antes e depois (nenhum arquivo criado/alterado)
+- [x] 2.1 Adicionar estágio `LOG_ANALYSIS` ao enum `AnalysisStage`, criar o prompt versionado `resources/prompts/log-analysis-v1.txt` (schema JSON com summary, failedStep, probableCause, evidence, recommendedAction, confidence; seção `DADOS NÃO CONFIÁVEIS` para o conteúdo do log) e o DTO tipado `LogAnalysisResult` em `ai/dto/AiResults`; verificar teste de que o prompt é carregado por versão e `mvn test` verde
+- [x] 2.2 Implementar `devops/LogAnalysisService` reusando `AiAnalysisService.generate()` (structured output, validação, retry máx. 2, fallback degradado marcado, trace event e métrica) com redação de segredos antes do envio; verificar testes unitários: saída válida convertida, saída inválida com retry limitado e fallback sem modelo configurado
+- [x] 2.3 Criar entidade `LogAnalysisRecord` + repositório (H2) e endpoint `POST /api/devops/log-analysis` em `DevOpsController`; verificar teste MockMvc: 200 com diagnóstico estruturado, registro persistido com promptVersion/resultJson/degraded/traceId e instrução injetada no log ignorada
+- [x] 2.4 Garantir que a análise de logs nunca altera o pipeline: verificar teste que executa a análise e compara os arquivos do repositório antes e depois (nenhum arquivo criado/alterado)
 
 ## 3. Detecção de anomalia e tendência de falha
 

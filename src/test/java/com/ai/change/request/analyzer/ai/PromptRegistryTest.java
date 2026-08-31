@@ -60,6 +60,17 @@ class PromptRegistryTest {
   }
 
   @Test
+  void loadsLogAnalysisPromptByStageAndVersion() {
+    PromptTemplate template = registry.load("log-analysis", 1);
+
+    assertThat(template.systemTemplate()).contains("failedStep");
+    assertThat(template.systemTemplate()).contains("NUNCA altera arquivos");
+    assertThat(template.systemTemplate()).doesNotContain("DADOS NÃO CONFIÁVEIS");
+    assertThat(template.userTemplate()).contains("{change_text}");
+    assertThat(template.userTemplate()).contains("DADOS NÃO CONFIÁVEIS");
+  }
+
+  @Test
   void unknownPromptFailsStructured() {
     assertThatThrownBy(() -> registry.load("nonexistent-stage", 1))
         .isInstanceOf(IllegalArgumentException.class)

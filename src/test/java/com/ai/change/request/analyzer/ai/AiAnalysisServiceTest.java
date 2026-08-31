@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.ai.change.request.analyzer.ai.dto.AiResults.ClassificationResult;
 import com.ai.change.request.analyzer.ai.dto.AiResults.CodeReviewResult;
 import com.ai.change.request.analyzer.ai.dto.AiResults.ImpactAnalysisResult;
+import com.ai.change.request.analyzer.ai.dto.AiResults.LogAnalysisResult;
 import com.ai.change.request.analyzer.ai.dto.AiResults.RiskAnalysisResult;
 import com.ai.change.request.analyzer.ai.dto.AiResults.SecurityAnalysisResult;
 import com.ai.change.request.analyzer.ai.dto.AiResults.TestPlanResult;
@@ -302,6 +303,49 @@ class AiAnalysisServiceTest {
     CodeReviewResult result = service.reviewCode("Alterar desconto VIP", "evidencia");
 
     assertThat(result.degraded()).isTrue();
+  }
+
+  private static final String VALID_LOG =
+      "{\"summary\":\"falha na etapa de compilacao\",\"failedStep\":\"compile\",\"probableCause\":\"erro de sintaxe no modulo discount-service\",\"evidence\":\"ERROR: DiscountService.java:42\",\"recommendedAction\":\"corrigir a sintaxe e reexecutar a compilacao\",\"confidence\":0.9}";
+  private static final String INVALID_LOG =
+      "{\"summary\":\"\",\"failedStep\":\"\",\"probableCause\":\"\",\"evidence\":\"x\",\"recommendedAction\":\"\",\"confidence\":2.0}";
+
+  @Test
+  void analyzeLogsLoadsVersionedPromptAndAcceptsValidOutput() {
+    PromptRegistry.PromptTemplate template = new PromptRegistry().load("log-analysis", 1);
+    assertThat(template.renderUser(java.util.Map.of("change_text", "log", "evidence", "")))
+        .contains("DADOS NÃO CONFIÁVEIS");
+
+    AiAnalysisService service = serviceWith(new FakeChatModel(VALID_LOG));
+
+    LogAnalysisResult result = service.analyzeLogs("[ERROR] falha na compilacao");
+
+    assertThat(result.degraded()).isFalse();
+    assertThat(result.failedStep()).isEqualTo("compile");
+    assertThat(result.confidence()).isEqualTo(0.9);
+  }
+
+  @Test
+  void analyzeLogsPersistentlyInvalidOutputFallsBackDegradedMarked() {
+    AiAnalysisService service =
+        serviceWith(new FakeChatModel(INVALID_LOG, NOT_JSON, INVALID_LOG));
+
+    LogAnalysisResult result = service.analyzeLogs("[ERROR] falha na compilacao");
+
+    assertThat(result.degraded()).isTrue();
+    assertThat(result.probableCause()).isEqualTo("analysis_unavailable");
+    assertThat(result.confidence()).isEqualTo(0.0);
+  }
+
+  @Test
+  void analyzeLogsWithoutModelReturnsMarkedFallback() {
+    AiAnalysisService service = serviceWith(null);
+
+    LogAnalysisResult result = service.analyzeLogs("[ERROR] falha na compilacao");
+
+    assertThat(result.degraded()).isTrue();
+    assertThat(result.failedStep()).isEqualTo("unknown");
+    assertThat(result.recommendedAction()).contains("Revisao humana");
   }
 
   static class FakeChatModel implements ChatModel {

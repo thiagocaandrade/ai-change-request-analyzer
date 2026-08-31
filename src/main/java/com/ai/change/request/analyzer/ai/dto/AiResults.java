@@ -64,4 +64,13 @@ public final class AiResults {
       @NotNull @Size(max = 8) List<@Valid CodeReviewFindingDto> findings,
       @NotNull List<@Valid RiskCategorySuggestionDto> riskCategories,
       Boolean degraded) {}
+
+  public record LogAnalysisResult(
+      @NotBlank @Size(max = 500) String summary,
+      @NotBlank @Size(max = 100) String failedStep,
+      @NotBlank @Size(max = 1000) String probableCause,
+      @Size(max = 2000) String evidence,
+      @NotBlank @Size(max = 1000) String recommendedAction,
+      @NotNull @DecimalMin("0.0") @DecimalMax("1.0") Double confidence,
+      Boolean degraded) {}
 }
