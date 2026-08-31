@@ -15,7 +15,7 @@ Plano consolidado das fases originais (chat) em **10 changes OpenSpec**, na orde
 | 07 | `frontend` | 1 tela Thymeleaf + página de trace (etapas, duração, tools, documentos recuperados) | FASE 16 | **concluída** (arquivada 2026-08-30) |
 | 08 | `ai-quality-and-testing` | AI code review, geração/refinamento de testes, teste baseado em risco com matriz Impact × Likelihood | FASE 17, 18 | **concluída** (arquivada 2026-08-30) |
 | 09 | `devops-and-n8n` | CI/CD completo, análise de logs com IA, detecção de anomalia + tendência de falha, workflow n8n exportável | FASE 19, 20, 21, 22 | **concluída** (arquivada 2026-08-30) |
-| 10 | `final-hardening` | Refinamento de prompts v1→v2 com evidência, configuração de modelo por env, auditoria final (`/opsx:verify`), matriz README, `docs/evidence/` | FASE 23, 24, 25 | pendente |
+| 10 | `final-hardening` | Refinamento de prompts v1→v2 com evidência, configuração de modelo por env, auditoria final (`/opsx:verify`), matriz README, `docs/evidence/` | FASE 23, 24, 25 | **concluída** (implementada 2026-08-30; arquivamento via `/opsx-archive`) |
 
 ## Detalhes técnicos por change (consolidados)
 
