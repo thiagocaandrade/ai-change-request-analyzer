@@ -44,6 +44,7 @@ public class AiAnalysisService {
   private final AnalysisMetrics metrics;
   private final TraceService traceService;
   private final String modelName;
+  private final String provider;
 
   public AiAnalysisService(
       PromptRegistry promptRegistry,
@@ -53,7 +54,8 @@ public class AiAnalysisService {
       ResilienceExecutor resilienceExecutor,
       AnalysisMetrics metrics,
       TraceService traceService,
-      @Value("${ai.chat.model:}") String modelName) {
+      @Value("${ai.chat.model:}") String modelName,
+      @Value("${ai.provider:openai}") String provider) {
     this.promptRegistry = promptRegistry;
     this.validator = validator;
     this.chatClientProvider = chatClientProvider;
@@ -62,6 +64,7 @@ public class AiAnalysisService {
     this.metrics = metrics;
     this.traceService = traceService;
     this.modelName = modelName;
+    this.provider = provider;
   }
 
   public ClassificationResult classify(String changeText) {
@@ -210,13 +213,21 @@ public class AiAnalysisService {
     String model = modelName == null || modelName.isBlank() ? "unconfigured" : modelName;
     ChatClient chatClient = chatClientProvider.getIfAvailable();
     if (chatClient == null) {
-      traceService.record(stage.id(), "ai_unavailable", null, "degraded", null, null, null, model);
-      log.warn("ai_unavailable stage={} model={} trace_id={}", stage.id(), model, traceId);
+      String event = "openai".equals(provider) ? "ai_unavailable" : "ai_provider_unsupported";
+      traceService.record(stage.id(), event, null, "degraded", null, null, null, model);
+      log.warn(
+          "{} stage={} model={} provider={} trace_id={}",
+          event,
+          stage.id(),
+          model,
+          provider,
+          traceId);
       return fallback.get();
     }
 
     var converter = new BeanOutputConverter<>(outputType);
-    PromptRegistry.PromptTemplate template = promptRegistry.load(stage.id(), 1);
+    PromptRegistry.PromptTemplate template =
+        promptRegistry.load(stage.id(), stage.defaultVersion());
     String system = template.renderSystem(Map.of("format", converter.getFormat()));
     String user =
         template.renderUser(
