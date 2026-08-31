@@ -46,7 +46,8 @@ public class PipelineRunService {
   public RunReport register(long durationMs, boolean success) {
     String traceId = MDC.get("trace_id");
     List<PipelineRun> history = runRepository.findTop100ByOrderByCreatedAtAsc();
-    List<Double> durations = history.stream().mapToDouble(PipelineRun::getDurationMs).boxed().toList();
+    List<Double> durations =
+        history.stream().mapToDouble(PipelineRun::getDurationMs).boxed().toList();
 
     AnomalyResult anomaly = anomalyService.analyze(durations, (double) durationMs);
     traceService.record(

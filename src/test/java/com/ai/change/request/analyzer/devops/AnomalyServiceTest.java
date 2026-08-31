@@ -70,8 +70,7 @@ class AnomalyServiceTest {
 
   @Test
   void increasingFailureRateRegistersTrend() {
-    TrendResult result =
-        service.failureTrend(List.of(true, true, false, false, false));
+    TrendResult result = service.failureTrend(List.of(true, true, false, false, false));
 
     assertThat(result.trend()).isTrue();
     assertThat(result.windowSize()).isEqualTo(5);
@@ -81,8 +80,7 @@ class AnomalyServiceTest {
 
   @Test
   void decreasingFailureRateHasNoTrend() {
-    TrendResult result =
-        service.failureTrend(List.of(false, false, true, true, true));
+    TrendResult result = service.failureTrend(List.of(false, false, true, true, true));
 
     assertThat(result.trend()).isFalse();
     assertThat(result.failureRate()).isEqualTo(0.4);
@@ -91,8 +89,7 @@ class AnomalyServiceTest {
 
   @Test
   void nonMonotonicFailureRateHasNoTrend() {
-    TrendResult result =
-        service.failureTrend(List.of(true, false, true, false, true));
+    TrendResult result = service.failureTrend(List.of(true, false, true, false, true));
 
     assertThat(result.trend()).isFalse();
     assertThat(result.rates()).containsExactly(0.5, 0.5);
