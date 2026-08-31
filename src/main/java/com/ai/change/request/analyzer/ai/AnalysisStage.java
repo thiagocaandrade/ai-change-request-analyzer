@@ -19,4 +19,13 @@ public enum AnalysisStage {
   public String id() {
     return id;
   }
+
+  /**
+   * Versao padrao do prompt versionado da etapa. A etapa de risco usa a v2 (refinada por evidencia
+   * comparavel, ver docs/prompt-refinement.md); a v1 permanece carregavel para reproducao do
+   * experimento.
+   */
+  public int defaultVersion() {
+    return this == RISK_ANALYSIS ? 2 : 1;
+  }
 }

@@ -49,6 +49,30 @@ class PromptRegistryTest {
   }
 
   @Test
+  void loadsRiskAnalysisV1AndV2() {
+    PromptTemplate v1 = registry.load("risk-analysis", 1);
+    PromptTemplate v2 = registry.load("risk-analysis", 2);
+
+    assertThat(v1.systemTemplate()).doesNotContain("Regras de evidência");
+    assertThat(v2.systemTemplate()).contains("Regras de evidência");
+    assertThat(v2.systemTemplate()).contains("confiança");
+    assertThat(v2.systemTemplate()).contains("{format}");
+    assertThat(v2.userTemplate()).contains("DADOS NÃO CONFIÁVEIS");
+    assertThat(v2.systemTemplate()).doesNotContain("DADOS NÃO CONFIÁVEIS");
+    assertThat(v1.userTemplate()).contains("DADOS NÃO CONFIÁVEIS");
+  }
+
+  @Test
+  void riskStageDefaultsToVersion2WhileOthersUseVersion1() {
+    assertThat(AnalysisStage.RISK_ANALYSIS.defaultVersion()).isEqualTo(2);
+    for (AnalysisStage stage : AnalysisStage.values()) {
+      if (stage != AnalysisStage.RISK_ANALYSIS) {
+        assertThat(stage.defaultVersion()).isEqualTo(1);
+      }
+    }
+  }
+
+  @Test
   void loadsSecurityAnalysisPromptByStageAndVersion() {
     PromptTemplate template = registry.load("security-analysis", 1);
 

@@ -10,6 +10,7 @@ import com.ai.change.request.analyzer.ai.dto.AiResults.RiskAnalysisResult;
 import com.ai.change.request.analyzer.ai.dto.AiResults.SecurityAnalysisResult;
 import com.ai.change.request.analyzer.ai.dto.AiResults.TestPlanResult;
 import com.ai.change.request.analyzer.observability.AnalysisMetrics;
+import com.ai.change.request.analyzer.observability.TraceEvent;
 import com.ai.change.request.analyzer.observability.TraceEventRepository;
 import com.ai.change.request.analyzer.observability.TraceService;
 import com.ai.change.request.analyzer.resilience.ResilienceExecutor;
@@ -20,6 +21,7 @@ import java.util.ArrayDeque;
 import java.util.List;
 import java.util.Queue;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.messages.AssistantMessage;
@@ -48,19 +50,24 @@ class AiAnalysisServiceTest {
   }
 
   private AiAnalysisService serviceWith(ChatModel model, long timeoutMs) {
-    ObjectProvider<ChatClient> provider =
+    return serviceWith(model, timeoutMs, "openai");
+  }
+
+  private AiAnalysisService serviceWith(ChatModel model, long timeoutMs, String provider) {
+    ObjectProvider<ChatClient> providerObj =
         providerOf(model == null ? null : ChatClient.builder(model).build());
     TraceService traceService = new TraceService(Mockito.mock(TraceEventRepository.class));
     ResilienceExecutor executor = new ResilienceExecutor(traceService, 0, 10);
     return new AiAnalysisService(
         new PromptRegistry(),
         validator,
-        provider,
+        providerObj,
         timeoutMs,
         executor,
         new AnalysisMetrics(meterRegistry),
         traceService,
-        "");
+        "",
+        provider);
   }
 
   @Test
@@ -118,6 +125,60 @@ class AiAnalysisServiceTest {
     assertThat(result.level()).isEqualTo("HIGH");
     assertThat(result.confidence()).isEqualTo(0.9);
     assertThat(result.degraded()).isFalse();
+  }
+
+  @Test
+  void riskStageUsesV2PromptByDefaultWithUntrustedSectionInUserOnly() {
+    CapturingChatModel model = new CapturingChatModel(VALID_RISK);
+    AiAnalysisService service = serviceWith(model);
+
+    RiskAnalysisResult result = service.assessRisk("Alterar desconto VIP", "evidencia");
+
+    assertThat(result.degraded()).isFalse();
+    assertThat(model.systemContent).contains("Regras de evidência");
+    assertThat(model.systemContent).doesNotContain("DADOS NÃO CONFIÁVEIS");
+    assertThat(model.userContent).contains("DADOS NÃO CONFIÁVEIS");
+    assertThat(model.userContent).contains("evidencia");
+  }
+
+  @Test
+  void otherStagesKeepV1PromptByDefault() {
+    CapturingChatModel model = new CapturingChatModel(VALID_CLASSIFICATION);
+    AiAnalysisService service = serviceWith(model);
+
+    ClassificationResult result = service.classify("Alterar desconto VIP");
+
+    assertThat(result.degraded()).isFalse();
+    assertThat(model.systemContent).contains("classificar a solicitação");
+    assertThat(model.systemContent).doesNotContain("Regras de evidência");
+  }
+
+  @Test
+  void unsupportedProviderDegradesMarkedWithStructuredEvent() {
+    TraceEventRepository repository = Mockito.mock(TraceEventRepository.class);
+    TraceService traceService = new TraceService(repository);
+    ResilienceExecutor executor = new ResilienceExecutor(traceService, 0, 10);
+    AiAnalysisService service =
+        new AiAnalysisService(
+            new PromptRegistry(),
+            validator,
+            providerOf(null),
+            5000,
+            executor,
+            new AnalysisMetrics(meterRegistry),
+            traceService,
+            "",
+            "anthropic");
+
+    RiskAnalysisResult result = service.assessRisk("Alterar desconto VIP", "evidencia");
+
+    assertThat(result.degraded()).isTrue();
+    assertThat(result.level()).isEqualTo("MEDIUM");
+    assertThat(result.rationale()).isEqualTo("analysis_unavailable");
+    ArgumentCaptor<TraceEvent> captor = ArgumentCaptor.forClass(TraceEvent.class);
+    Mockito.verify(repository).save(captor.capture());
+    assertThat(captor.getValue().getEvent()).isEqualTo("ai_provider_unsupported");
+    assertThat(captor.getValue().getStatus()).isEqualTo("degraded");
   }
 
   @Test
@@ -345,6 +406,28 @@ class AiAnalysisServiceTest {
     assertThat(result.degraded()).isTrue();
     assertThat(result.failedStep()).isEqualTo("unknown");
     assertThat(result.recommendedAction()).contains("Revisao humana");
+  }
+
+  static class CapturingChatModel implements ChatModel {
+
+    private final String response;
+    String systemContent = "";
+    String userContent = "";
+
+    CapturingChatModel(String response) {
+      this.response = response;
+    }
+
+    @Override
+    public ChatResponse call(Prompt prompt) {
+      if (prompt.getSystemMessage() != null) {
+        systemContent = prompt.getSystemMessage().getText();
+      }
+      if (prompt.getUserMessage() != null) {
+        userContent = prompt.getUserMessage().getText();
+      }
+      return new ChatResponse(List.of(new Generation(new AssistantMessage(response))));
+    }
   }
 
   static class FakeChatModel implements ChatModel {
