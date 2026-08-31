@@ -55,10 +55,10 @@ Resposta de `POST /analyze`: `{request_id, status, result}` com `status` em `com
 
 ## Camada IA (Spring AI)
 
-- **Prompts versionados:** `src/main/resources/prompts/<etapa>-v1.txt` (`classification`, `impact-analysis`, `risk-analysis`, `test-generation`), carregados por `PromptRegistry` (etapa + versão); nenhum prompt de produção embutido em código.
+- **Prompts versionados:** `src/main/resources/prompts/<etapa>-v<N>.txt` (`classification`, `impact-analysis`, `risk-analysis`, `test-generation` e demais etapas), carregados por `PromptRegistry` (etapa + versão); nenhum prompt de produção embutido em código. A etapa de risco usa `risk-analysis-v2` como padrão (refinada por evidência comparável — ver `docs/prompt-refinement.md`); a v1 permanece carregável para reproduzir o experimento.
 - **Structured output validado:** `AiAnalysisService` converte a saída do LLM em records tipados (`BeanOutputConverter` + jakarta.validation), com retry limitado (máx. 2) e backoff entre tentativas via `ResilienceExecutor`. Saída inválida é descartada — nunca persistida. Esgotado o limite → fallback determinístico marcado (`degraded=true`; risco `MEDIUM`, rationale `analysis_unavailable`). Cada tentativa é registrada em log estruturado e em evento de auditoria com `model` e `trace_id`; métricas `llm_calls` e `validation_failures`.
 - **Conteúdo recuperado é dado:** a evidência entra na seção delimitada `DADOS NÃO CONFIÁVEIS` do user message, nunca no system prompt.
-- **Sem chave, análise segue degradada:** o `ChatClient` só existe com `ai.chat.api-key`; timeout configurável (`ai.chat.timeout-ms`); segredos nunca aparecem em logs ou respostas.
+- **Configuração do modelo por env:** `AI_PROVIDER` (único valor suportado hoje: `openai`), `AI_MODEL`, `AI_TEMPERATURE` e `AI_API_KEY` (mapeados para `ai.provider`/`ai.chat.*` em `application.yml`). Sem chave ou com provider não suportado, o `ChatClient` não existe e a análise segue degradada marcada (evento `ai_unavailable`/`ai_provider_unsupported` com `provider`); temperatura ausente ou inválida → default do provedor com warning estruturado (`node=ai_config event=invalid_temperature`). `AI_CHAT_BASE_URL` permanece como extensão para endpoints OpenAI-compatíveis. Segredos nunca aparecem em logs ou respostas.
 
 ## Tools (4, executadas na JVM)
 
@@ -156,6 +156,62 @@ Matriz desta change:
 | Tendência/risco de falha | `devops/AnomalyService.failureTrend` (janela de 5) | idem | `AnomalyServiceTest` / `DevOpsRunsEndpointTest` |
 | n8n (low-code) | `n8n/workflow.json` + `n8n/README.md` | `docs/evidence/13-n8n.png` | `N8nWorkflowTest` / `N8nWorkflowContractTest` |
 
+## Matriz de requisitos (contrato do projeto)
+
+Matriz final Requisito → Implementação → Evidência → Teste → Risco, gerada do checklist de auditoria do roadmap e do contrato (`docs/AI_CHANGE_REQUEST_ANALYZER_PROJECT_CONTRACT.md`) contra as specs em `openspec/specs/`.
+
+| # | Requisito | Implementação | Evidência | Teste | Risco |
+|---|---|---|---|---|---|
+| 1 | Problema de negócio, usuários, entradas/saídas, limites e critérios de sucesso | Domínio em `domain/` + `knowledge/` (regras de desconto VIP); usuários e critérios no README e `docs/` | Cenários A/B reprodutíveis | `WebE2ETest` / smoke | Nenhum relevante |
+| 2 | Classificação agente / determinístico / híbrido | Híbrido documentado: LangGraph orquestra, LLM sugere, Java decide (`RiskPolicy`, `SecurityAssessmentService`) | `docs/evidence/01-langgraph.png` + README | — | Nenhum relevante |
+| 3 | LangGraph com estado tipado, nós e arestas explícitas | `agent/graph/` + `ChangeRequestState` (13 nós) | `01-langgraph.png` | `agent/tests/test_graph.py` | Nenhum relevante |
+| 4 | Execução sequencial | `validate_request → classify_request → detect_untrusted_content → … → finalize` | idem | idem | Nenhum relevante |
+| 5 | Branching condicional | `approval_router`: HIGH → `human_approval`; LOW/MEDIUM → segue | idem | idem (cenário high risk) | Nenhum relevante |
+| 6 | Paralelização simples (real) | `analyze_code ‖ retrieve_knowledge ‖ retrieve_history` | `02-parallel-execution.png` (trace com janelas sobrepostas) | `test_graph.py` (paralelismo) | Evidência depende do trace real do smoke (regenerável) |
+| 7 | Condições de parada/continuação; sem loop | `validate_final_result` com retry ≤ 2 → `END_WITH_ERROR` | idem | `test_graph.py` (max iteration) | Nenhum relevante |
+| 8 | Separação LLM vs regras determinísticas | LLM sugere (structured output validado); `RiskPolicy` decide aprovação; `SecurityAssessmentService` decide detecção | README + `knowledge/business-rules.md` | `RiskPolicyTest` / `SecurityAssessmentServiceTest` / `AiAnalysisServiceTest` | Nenhum relevante |
+| 9 | Tool funcional integrada (MCP/API/service) | 4 tools em `tools/`; `search_code`/`get_file` expostas via MCP (`/mcp`) | `04-mcp.png` + `scripts/mcp_tools_demo.py` | `McpToolsTest` / `*ToolTest` | Nenhum relevante |
+| 10 | Validação de entrada/esquema + tratamento de falha | jakarta.validation + `BeanOutputConverter`; retry limitado; 400/404/409 estruturados | README | `AiAnalysisServiceTest` / `ChangeRequestControllerTest` / `AgentGatewayControllerTest` | Nenhum relevante |
+| 11 | Memória/contexto | `AnalysisMemoryService` + tabelas `change_request`/`change_analysis`/`analysis_finding`/`approval` | trace page + README | `AnalysisMemoryServiceTest` / `ChangeAnalysisRepositoryTest` | Nenhum relevante |
+| 12 | RAG (fontes, chunking, indexação, recuperação) | `KnowledgeIngestionService` + `Chunker` + pgvector (`PgVectorSchemaMigration`) + `RagService` (top-k, threshold, scores) | `03-rag.png` + `scripts/rag_demo.py` | `RagServiceTest` / `ChunkerTest` / `KnowledgeIngestionServiceTest` | Nenhum relevante |
+| 13 | Proteção de credenciais/sensíveis | Segredos só via env; `.env.example` sem valores reais; redação de logs (`scripts/redact_logs.py`) | `.env.example` | — | Nenhum relevante |
+| 14 | Validação de permissão + limites de autonomia | `RepoAccessPolicy` (path traversal, raiz configurada); agente read-only; sem shell | `04-mcp.png` | `RepoAccessPolicyTest` / `GetFileToolTest` | Nenhum relevante |
+| 15 | Cenário adversarial (prompt injection) | `SecurityAssessmentService` (varredura determinística) + prompt `security-analysis-v1` + seção `DADOS NÃO CONFIÁVEIS` | `05-prompt-injection.png` | `SecurityAssessmentServiceTest` / smoke (Cenário B) | Nenhum relevante |
+| 16 | Ações não autorizadas bloqueadas | Tool sem shell, sem escrita, sem acesso fora do repo; n8n sem lógica de negócio | `RepoAccessPolicyTest` | idem | Nenhum relevante |
+| 17 | Informações sensíveis não reveladas | Redação de logs + escaping Thymeleaf (`th:text` apenas) + nenhum segredo em eventos | README | `WebUiTest` (escaping) | Nenhum relevante |
+| 18 | ≥ 2 sinais observáveis correlacionados (logs estruturados + trace) | Logs JSON (`logstash-logback-encoder`) + tabela `trace_event` + métricas Micrometer | `07-observability.png` | `TraceTest` / `TraceServiceTest` / `AnalysisMetricsTest` | Nenhum relevante |
+| 19 | Investigação de execução (fluxo, decisões, erros, latência) | `GET /api/traces/{traceId}` + página de trace | `07-observability.png` | `TraceEndpointTest` / `TraceViewTest` | Nenhum relevante |
+| 20 | Timeout, retry limitado, fallback | `ResilienceExecutor` único para LLM, MCP, RAG, tools, agente | README §Resiliência | `ResilienceExecutorTest` / `ResilienceTest` / `ResilientToolCallbackTest` | Nenhum relevante |
+| 21 | Code review IA de mudança real | `qa/QaCodeReviewService` + estágio `CODE_REVIEW` + prompt `code-review-v1` | `09-ai-code-review.png` | `QaCodeReviewServiceTest` | Nenhum relevante |
+| 22 | Geração/refinamento de testes com IA | `qa/QaService` (geração + refinamento ≤ 2 com feedback registrado) | idem (trace `qa_refinement`) | `QaServiceTest` / `QaTraceEventTest` | Nenhum relevante |
+| 23 | ≥ 1 teste integração/aceitação/E2E | `QaE2ETest` / `WebE2ETest` / `DevOpsScenarioIT` / smoke | `10-e2e.png` | smoke (Cenários A/B) | Evidência depende da execução do smoke (regenerável) |
+| 24 | Priorização de testes por risco | `qa/RiskMatrixService` (Impact × Likelihood determinística, 4 categorias) | `09-ai-code-review.png` (matriz na página) | `RiskMatrixServiceTest` / `QaE2ETest` | Nenhum relevante |
+| 25 | CI: lint, testes, build | `.github/workflows/ci.yml` (compile → unit → integration → quality → Docker; jobs agent e e2e) | `11-github-actions.png` | Pipeline verde no GitHub Actions | Nenhum relevante |
+| 26 | Análise IA de logs de ≥ 2 estágios | `devops/LogAnalysisService` sobre `build.log`/`test.log` (2 estágios) + estágio `LOG_ANALYSIS` | `11-github-actions.png` + `12-anomaly.png` | `LogAnalysisServiceTest` / `DevOpsScenarioIT` | Nenhum relevante |
+| 27 | Detecção + explicação de ≥ 1 anomalia | `devops/AnomalyService` (baseline + desvio + severidade, ex.: 400ms → 2800ms = HIGH) | `12-anomaly.png` | `AnomalyServiceTest` / `DevOpsRunsEndpointTest` | Nenhum relevante |
+| 28 | Tendência/risco de falha com dados reais/simulados | `AnomalyService.failureTrend` (janela de 5 execuções) | idem | idem | Nenhum relevante |
+| 29 | Automação low-code integrada | n8n: webhook → `POST /api/change-requests` → IF HIGH → notificação | `13-n8n.png` | `N8nWorkflowTest` / `N8nWorkflowContractTest` | Importação manual (sem servidor n8n no compose) — documentada |
+| 30 | Fluxo low-code com trigger, integração e saída observável | `n8n/workflow.json` + `n8n/README.md` (trigger/endpoint/payload/condição/saída) | idem | idem | idem |
+| 31 | Lógica de negócio principal no app | n8n apenas repassa o campo `riskLevel` calculado no Spring Boot | idem | idem | Nenhum relevante |
+| 32 | Prompts documentados | `resources/prompts/*-v<N>.txt` + README §Camada IA + `docs/prompt-refinement.md` | — | `PromptRegistryTest` | Nenhum relevante |
+| 33 | Modelo configurável por env | `AI_PROVIDER`/`AI_MODEL`/`AI_TEMPERATURE`/`AI_API_KEY` → `application.yml`; ausência → degradado marcado; `.env.example` sem valores reais | `.env.example` + README §Variáveis | `AiConfigTest` / `AiAnalysisServiceTest` | Nenhum relevante |
+| 34 | ≥ 1 ciclo de refinamento de prompt | `risk-analysis-v1` → `risk-analysis-v2` com experimento e decisão documentados | `14-prompt-refinement.png` + `docs/prompt-refinement.md` | `PromptRegistryTest` / `AiAnalysisServiceTest` | Execução com modelo real depende de chave (reproduzível via `scripts/prompt_experiment.py`) |
+| 35 | README explica, configura, executa e avalia | Seções completas (arquitetura, grafo, IA, tools, RAG, memória, segurança, web, QA, DevOps, execução, envs, endpoints, observabilidade, resiliência, testes, matriz) | — | — | Nenhum relevante |
+| 36 | Dois cenários reprodutíveis | Cenário A (VIP 10%→15%) e Cenário B (injeção) via `scripts/smoke_test.py` | `10-e2e.png` | smoke | idem item 23 |
+| 37 | GitHub Project/Kanban refletindo o processo | Projeto 62 no GitHub com tarefa pai + subtarefas tramitadas por status (fluxo `.kilo/workflows/opsx-flow.md`) | Board do projeto + histórico de commits `[NN.M]` | — | Fora do repositório (registro no GitHub) |
+| 38 | Histórico git coerente (branches + commits semânticos) | `feature/<change>-<nn.m>` + commits `[NN.M] título` + merges na master | `git log` | — | Nenhum relevante |
+| 39 | Workflow main/develop/feature | master + `feature/*` (workflow simplificado documentado no AGENTS.md; sem branch `develop`) | `git log` | — | Divergência com o exemplo do contrato (§30), aceita e documentada no AGENTS.md |
+| 40 | Evidências técnicas organizadas | `docs/evidence/` com 14 arquivos, um por requisito demonstrável | `docs/evidence/` | — | Algumas capturas são placeholders regeneráveis (05/06, 02/10/14) até a captura final da demonstração |
+| 41 | Vídeo de demonstração | Roteiro completo em `docs/roadmap.md` (§Roteiro do vídeo) | pendente | — | **Pendente de gravação** (fora do código; roteiro pronto) |
+
+### Conclusão da auditoria (change `final-hardening`)
+
+Auditoria executada contra o contrato do projeto (`docs/AI_CHANGE_REQUEST_ANALYZER_PROJECT_CONTRACT.md`) e as specs de `openspec/specs/` em 2026-08-30:
+
+- **Nenhum defeito de código ou especificação** foi encontrado que exija nova change OpenSpec — todos os requisitos têm implementação, teste e evidência (matriz acima); `mvn test` (301 testes) e `pytest agent/` (52 testes) verdes, CI verde na master.
+- **Itens residuais fora do código** (não são defeitos; não geram changes): gravação do vídeo de demonstração (roteiro pronto em `docs/roadmap.md`); captura final dos screenshots reais das evidências 05/06/14 na demonstração (placeholders regeneráveis via `scripts/generate_evidence.py`); workflow de branch master+`feature/*` (sem `develop`), divergência do exemplo do contrato aceita e documentada no AGENTS.md.
+- **Execução de experimento com modelo real** (`scripts/prompt_experiment.py`): depende de `AI_API_KEY`; sem chave, a decisão da v2 do prompt de risco está sustentada pela comparação determinística documentada em `docs/prompt-refinement.md`.
+
 ## Execução via Docker Compose
 
 Pré-requisitos: Docker (com Compose v2) e Docker Desktop em execução.
@@ -231,9 +287,11 @@ Toda configuração é fornecida por variáveis de ambiente (referência em `.en
 | `AGENT_PORT` | `8000` | Porta publicada do agente |
 | `APP_URL` | `http://app:8080` | Base URL da aplicação para o sidecar (contrato `/api/agent/**`) |
 | `APP_PORT` | `8080` | Porta publicada do app |
-| `AI_CHAT_MODEL` | *(vazio)* | Modelo de IA (chat) |
-| `AI_CHAT_API_KEY` | *(vazio)* | Chave de API do chat (sem chave, a análise segue degradada) |
-| `AI_CHAT_BASE_URL` | *(vazio)* | Base URL do provedor de IA |
+| `AI_PROVIDER` | `openai` | Provedor do modelo de chat (único valor suportado hoje; outro valor → análise degradada marcada) |
+| `AI_MODEL` | *(vazio)* | Modelo de IA (chat) |
+| `AI_TEMPERATURE` | *(vazio)* | Temperatura do modelo; ausente/inválida → default do provedor |
+| `AI_API_KEY` | *(vazio)* | Chave de API do chat (sem chave, a análise segue degradada marcada) |
+| `AI_CHAT_BASE_URL` | *(vazio)* | Base URL do provedor de IA (extensão para endpoints OpenAI-compatíveis) |
 | `AI_EMBEDDING_MODEL` | *(vazio)* | Modelo de embeddings (RAG) |
 | `AI_EMBEDDING_API_KEY` | *(vazio)* | Chave de embeddings (sem chave, o RAG fica desativado) |
 | `AI_EMBEDDING_BASE_URL` | *(vazio)* | Base URL do provedor de embeddings |

@@ -1,0 +1,16 @@
+{
+  "traceId": "cc635778-bedc-43a4-b7fa-d375d323ae8c",
+  "scenarioA": {
+    "status": "COMPLETED",
+    "riskLevel": "MEDIUM",
+    "degraded": true
+  },
+  "scenarioB": {
+    "injectionDetected": true,
+    "securityEvents": 1,
+    "approvalStatus": "APPROVED",
+    "approver": "revisora",
+    "decision": "APPROVED",
+    "riskLevel": "HIGH"
+  }
+}
