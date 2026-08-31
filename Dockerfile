@@ -1,9 +1,9 @@
 FROM maven:3.9-eclipse-temurin-21 AS build
 WORKDIR /build
 COPY pom.xml .
-RUN mvn -q dependency:go-offline
+RUN mvn -q -U -Dmaven.wagon.http.retryHandler.count=5 -Dmaven.wagon.httpconnectionManager.ttlSeconds=120 dependency:go-offline
 COPY src ./src
-RUN mvn -q package -DskipTests
+RUN mvn -q -U -Dmaven.wagon.http.retryHandler.count=5 -Dmaven.wagon.httpconnectionManager.ttlSeconds=120 package -DskipTests
 
 FROM eclipse-temurin:21-jre
 RUN apt-get update \
