@@ -1,10 +1,6 @@
-# ci-pipeline Specification
+# ci-pipeline Delta
 
-## Purpose
-
-Pipeline de integração contínua que valida automaticamente lint, testes e build dos serviços Java e Python a cada push ou pull request.
-
-## Requirements
+## MODIFIED Requirements
 
 ### Requirement: Pipeline de lint, testes e build
 
@@ -19,6 +15,8 @@ O repositório DEVE possuir workflow de CI que execute, a cada push ou pull requ
 
 - **WHEN** o código contém erro de lint, teste falhando ou build quebrado
 - **THEN** o pipeline falha na etapa correspondente e não prossegue para os estágios seguintes
+
+## ADDED Requirements
 
 ### Requirement: Imagem Docker publicável
 
