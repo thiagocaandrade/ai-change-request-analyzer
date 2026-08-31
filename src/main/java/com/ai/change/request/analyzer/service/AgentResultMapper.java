@@ -2,6 +2,7 @@ package com.ai.change.request.analyzer.service;
 
 import com.ai.change.request.analyzer.domain.ChangeAnalysis;
 import com.ai.change.request.analyzer.domain.ChangeRequest;
+import com.ai.change.request.analyzer.domain.ImpactFinding;
 import com.ai.change.request.analyzer.domain.RiskAssessment;
 import com.ai.change.request.analyzer.domain.RiskLevel;
 import com.ai.change.request.analyzer.security.SecurityAssessmentService.SecurityEvent;
@@ -30,6 +31,20 @@ public class AgentResultMapper {
     Double confidence = parseConfidence(result.get("confidence"));
     if (level != null && confidence != null && confidence >= 0.0 && confidence <= 1.0) {
       analysis.setRiskAssessment(new RiskAssessment(level, confidence, parseRationale(result)));
+    }
+    if (result.get("findings") instanceof List<?> rawFindings) {
+      for (Object item : rawFindings) {
+        if (!(item instanceof Map<?, ?> map)) {
+          continue;
+        }
+        String component = stringOf(map.get("component"));
+        String description = stringOf(map.get("description"));
+        if (component == null || description == null) {
+          continue;
+        }
+        analysis.addFinding(
+            new ImpactFinding(component, description, stringOf(map.get("severity"))));
+      }
     }
     for (AgentGatewayDtos.TestRecommendation recommendation : toRecommendations(result)) {
       analysis.addRecommendation(
