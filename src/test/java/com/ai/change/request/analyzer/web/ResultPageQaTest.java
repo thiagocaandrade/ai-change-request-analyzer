@@ -58,7 +58,7 @@ class ResultPageQaTest {
 
     assertThat(result.getResponse().getStatus()).isEqualTo(200);
     String content = result.getResponse().getContentAsString();
-    assertThat(content).contains("QA com IA (code review)");
+    assertThat(content).contains("Revisão de código com IA (QA)");
     assertThat(content).contains("teste de regressao ausente");
     assertThat(content).contains("business-rules.md");
     assertThat(content).contains("matriz deterministica");
@@ -92,7 +92,7 @@ class ResultPageQaTest {
 
     assertThat(result.getResponse().getStatus()).isEqualTo(200);
     String content = result.getResponse().getContentAsString();
-    assertThat(content).contains("QA com IA (code review)");
+    assertThat(content).contains("Revisão de código com IA (QA)");
     assertThat(content).contains("QA degradado");
     assertThat(content).contains("fallback deterministico com matriz avaliada");
   }

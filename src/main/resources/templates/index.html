@@ -17,26 +17,59 @@
     <p class="error" th:if="${error}" th:text="${error}"></p>
     <section class="card">
         <h2>Nova solicitação de alteração</h2>
-        <p>Descreva a alteração desejada no software. A aplicação analisa impacto, risco e testes recomendados.</p>
-        <form th:action="@{/change-requests}" th:object="${form}" method="post">
+        <p class="muted">Descreva a alteração desejada no software. A aplicação analisa impacto,
+            risco e testes recomendados.</p>
+        <form id="analyze-form" th:action="@{/change-requests}" th:object="${form}" method="post">
             <label for="text">Solicitação</label>
             <textarea id="text" name="text" rows="5"
                       th:field="*{text}"
                       placeholder="Ex.: Alterar o desconto de clientes VIP de 10% para 15%."></textarea>
             <p class="error" th:if="${#fields.hasErrors('text')}" th:errors="*{text}"></p>
-            <button type="submit">Analisar solicitação</button>
+            <button type="submit" class="submit-btn" data-loading="Analisando solicitação...">
+                Analisar solicitação
+            </button>
         </form>
     </section>
     <section class="card">
         <h2>Consultar execução (trace)</h2>
-        <p>Reconstrua uma execução anterior pelo trace_id.</p>
-        <form th:action="@{/traces}" method="post">
+        <p class="muted">Reconstrua uma execução anterior pelo trace_id.</p>
+        <form id="trace-form" th:action="@{/traces}" method="post">
             <label for="traceId">trace_id</label>
             <input type="text" id="traceId" name="traceId"
                    placeholder="Ex.: 550e8400-e29b-41d4-a716-446655440000">
-            <button type="submit" class="button-secondary">Ver trace</button>
+            <button type="submit" class="submit-btn button-secondary" data-loading="Buscando execução...">
+                Ver trace
+            </button>
         </form>
     </section>
 </main>
+<div id="loading-overlay" class="loading-overlay" hidden>
+    <div class="loading-box">
+        <span class="spinner" aria-hidden="true"></span>
+        <p id="loading-text">Processando...</p>
+    </div>
+</div>
+<script>
+    (function () {
+        var overlay = document.getElementById('loading-overlay');
+        var loadingText = document.getElementById('loading-text');
+        var forms = [document.getElementById('analyze-form'), document.getElementById('trace-form')];
+
+        forms.forEach(function (form) {
+            if (!form) {
+                return;
+            }
+            form.addEventListener('submit', function (event) {
+                var button = form.querySelector('.submit-btn');
+                if (!overlay || !button) {
+                    return;
+                }
+                overlay.hidden = false;
+                loadingText.textContent = button.getAttribute('data-loading') || 'Processando...';
+                button.disabled = true;
+            });
+        });
+    })();
+</script>
 </body>
 </html>
