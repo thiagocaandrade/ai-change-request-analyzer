@@ -20,9 +20,9 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 /**
- * Contrato do endpoint consumido pelo workflow n8n: o payload documentado em
- * {@code n8n/README.md} casa com {@code POST /api/change-requests} e a resposta contem o campo de
- * risco usado pela condicao do workflow.
+ * Contrato do endpoint consumido pelo workflow n8n: o payload documentado em {@code n8n/README.md}
+ * casa com {@code POST /api/change-requests} e a resposta contem o campo de risco usado pela
+ * condicao do workflow.
  */
 @SpringBootTest
 @AutoConfigureMockMvc

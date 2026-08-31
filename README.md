@@ -2,7 +2,7 @@
 
 Aplicação acadêmica que recebe uma solicitação de alteração em software e produz uma análise estruturada de impacto, risco e testes. O agente **não** altera código automaticamente.
 
-Caminho executável de ponta a ponta: fundação (`foundation`), domínio e API (`domain-and-api`), orquestração LangGraph completa (`langgraph-orchestration`), **IA, tools, RAG e memória reais** (`ai-rag-memory-tools`), **segurança + aprovação humana** (`security-and-human-approval`), **observabilidade + resiliência** (`observability-and-resilience`): logs JSON com campos padronizados, eventos de auditoria persistidos por execução (`GET /api/traces/{traceId}`), métricas Micrometer e política única de resiliência (timeout/retry/backoff/fallback) em LLM, MCP, RAG e tools — e **interface web** (`frontend`): páginas Thymeleaf de formulário, resultado com aprovação humana e trace da execução. As changes 08+ seguem em `docs/roadmap.md`.
+Caminho executável de ponta a ponta: fundação (`foundation`), domínio e API (`domain-and-api`), orquestração LangGraph completa (`langgraph-orchestration`), **IA, tools, RAG e memória reais** (`ai-rag-memory-tools`), **segurança + aprovação humana** (`security-and-human-approval`), **observabilidade + resiliência** (`observability-and-resilience`): logs JSON com campos padronizados, eventos de auditoria persistidos por execução (`GET /api/traces/{traceId}`), métricas Micrometer e política única de resiliência (timeout/retry/backoff/fallback) em LLM, MCP, RAG e tools — **interface web** (`frontend`): páginas Thymeleaf de formulário, resultado com aprovação humana e trace da execução — e **DevOps inteligente** (`devops-and-n8n`): CI completo com artefatos de log analisáveis, análise de logs com IA, detecção determinística de anomalia/tendência de falha e workflow n8n exportável. A change final (`final-hardening`) segue em `docs/roadmap.md`.
 
 ## Visão geral dos componentes
 
@@ -11,7 +11,7 @@ Caminho executável de ponta a ponta: fundação (`foundation`), domínio e API 
 | `app` | Java 21 · Spring Boot 4.1.1 · JPA · Spring AI | Recebe `POST /api/change-requests`, gera `trace_id`, delega ao agente com timeout/retry, persiste solicitação + análise estruturada. Hospeda a camada IA (prompts versionados + structured output + retry), as 4 tools, o RAG pgvector, a memória, o servidor MCP e os endpoints internos `/api/agent/**`. |
 | `agent` | Python 3.12 · FastAPI · LangGraph | Sidecar que executa o grafo LangGraph completo (13 nós) e obtém evidência real da aplicação via HTTP (`/api/agent/**`, timeout/retry, `X-Trace-Id`). |
 | `db` | PostgreSQL 16 + pgvector | Persistência do domínio (tabelas `change_request`, `change_analysis`, `impact_finding`, `risk_assessment`, `test_recommendation`, `approval`, `security_assessment`) e índice vetorial `vector_store` da base de conhecimento. |
-| CI | GitHub Actions | Lint (Spotless/ruff), testes e build dos dois serviços + job E2E. |
+| CI | GitHub Actions | Compile → unit (surefire) → integration (Failsafe) → quality (Spotless/ruff) → imagem Docker + artefatos `build.log`/`test.log` (redigidos) + job E2E. |
 
 ## Diagrama de arquitetura
 
@@ -120,6 +120,42 @@ Matriz desta change:
 | AI test generation / refinement | `qa/QaService` (geração + refinamento máx. 2 com feedback registrado) | idem (trace `qa_refinement`) | `QaServiceTest` / `QaTraceEventTest` |
 | Risk-based testing | `qa/RiskMatrixService` (tabela Impact × Likelihood determinística, 4 categorias) | idem (matriz na página) | `RiskMatrixServiceTest` / `QaE2ETest` |
 
+## DevOps: CI/CD, análise de logs com IA, anomalia e n8n
+
+A change 09 completa os requisitos de DevOps do contrato do projeto: pipeline de CI com estágios nomeados e artefatos de log analisáveis, diagnóstico assistido de logs de build/teste, detecção determinística de anomalia/tendência de falha e integração low-code via n8n — **sem lógica de negócio fora do Spring Boot**.
+
+### CI/CD completo (compile → unit → integration → quality → Docker)
+
+- `.github/workflows/ci.yml`: no job `spring`, estágios nomeados `Compile` → `Unit tests (surefire)` → `Integration tests (mvn verify com Failsafe)` → `Quality checks (spotless)` → `Docker image`; jobs `agent` (ruff + pytest) e `e2e` (compose + smoke) com `needs`. Falha em qualquer estágio interrompe os seguintes.
+- **Artefatos de log:** `build.log` (compile) e `test.log` (`mvn verify`) gerados com `tee`, **redigidos** por `scripts/redact_logs.py` (padrões `token|secret|password|api_key|authorization|bearer`, chave preservada e valor substituído por `***REDACTED***`) e publicados via `actions/upload-artifact` com `if: always()` — disponíveis mesmo quando o pipeline falha, para análise posterior por IA.
+- **Separação unit/integration:** `maven-failsafe-plugin` no `pom.xml` — surefire roda `*Test`, Failsafe roda `*IT` (ex.: `DevOpsScenarioIT`) em `mvn verify`.
+
+### Análise de logs com IA
+
+- **Estágio `LOG_ANALYSIS`** no pipeline de IA existente: prompt versionado `resources/prompts/log-analysis-v1.txt` (schema JSON `summary`, `failedStep`, `probableCause`, `evidence`, `recommendedAction`, `confidence`; seção `DADOS NÃO CONFIÁVEIS` para o conteúdo do log), structured output validado, retry máx. 2 com backoff, fallback determinístico marcado (`degraded=true`) sem modelo configurado.
+- **`devops/LogAnalysisService`:** redige segredos do log antes do envio ao modelo; varre instruções injetadas deterministicamente (`SecurityAssessmentService`, fonte `log_content`); o conteúdo do log é sempre dado, nunca instrução; **a IA nunca altera o pipeline** (teste `logAnalysisNeverModifiesPipelineFiles` compara checksums dos arquivos antes/depois).
+- **Endpoint `POST /api/devops/log-analysis`** (`{log}`): retorna o diagnóstico estruturado + eventos de segurança; cada diagnóstico persiste `LogAnalysisRecord` (promptVersion, resultJson, confidence, degraded, traceId) em H2 e registra trace events `log_analysis`/`security_event`.
+
+### Detecção de anomalia e tendência de falha (100% determinística, sem LLM)
+
+- **`devops/AnomalyService`:** baseline = média móvel das últimas N observações (`devops.anomaly.window-size`, default 5); desvio relativo = |obs − baseline| / baseline; severidade por limiares (`devops.anomaly.high-threshold` 0.5 → HIGH, `devops.anomaly.medium-threshold` 0.2 → MEDIUM; abaixo → normal). Exemplo: baseline 400ms, observado 2800ms → desvio 6.0 → **HIGH**. Mesma entrada → mesma saída (reprodutível por construção).
+- **Tendência de falha:** taxa de falha da metade recente da janela de 5 execuções vs metade antiga; crescente → tendência registrada.
+- **Endpoint `POST /api/devops/runs`** (`{durationMs, success}`): registra `PipelineRun`, detecta anomalia (persiste `AnomalyEvent` com traceId, métrica, baseline, observado, desvio, severidade) e retorna relatório com anomalia + tendência; trace events `anomaly_check`/`failure_trend` em ordem cronológica, correlacionados por `trace_id`.
+
+### Integração n8n (low-code)
+
+- `n8n/workflow.json` exportável: **Webhook** → **HTTP Request** `POST /api/change-requests` → **IF** `analysis.riskLevel == HIGH` → **notificação**; riscos LOW/MEDIUM concluem sem notificação. O workflow contém apenas integração/roteamento — o risco é calculado no Spring Boot e o n8n apenas repassa o campo. Documentação completa (trigger, endpoint, payload, resposta, condição, saída, evidência) em `n8n/README.md`; importação manual documentada (nenhum servidor n8n no compose). Evidência: `docs/evidence/13-n8n.png`.
+
+Matriz desta change:
+
+| Requisito | Implementação | Evidência | Teste |
+|---|---|---|---|
+| CI/CD (lint, testes, build) | `.github/workflows/ci.yml` (estágios nomeados + artefatos de log redigidos) | `docs/evidence/11-github-actions.png` | `N8nWorkflowTest` (estrutural do YAML usado no pipeline) / `mvn verify` verde |
+| Análise de logs com IA | `devops/LogAnalysisService` + estágio `LOG_ANALYSIS` + `prompts/log-analysis-v1.txt` | idem (diagnóstico no endpoint) | `LogAnalysisServiceTest` / `DevOpsControllerTest` / `DevOpsScenarioIT` |
+| Detecção de anomalia | `devops/AnomalyService` (baseline, desvio, severidade) | `docs/evidence/12-anomaly.png` | `AnomalyServiceTest` / `DevOpsRunsEndpointTest` |
+| Tendência/risco de falha | `devops/AnomalyService.failureTrend` (janela de 5) | idem | `AnomalyServiceTest` / `DevOpsRunsEndpointTest` |
+| n8n (low-code) | `n8n/workflow.json` + `n8n/README.md` | `docs/evidence/13-n8n.png` | `N8nWorkflowTest` / `N8nWorkflowContractTest` |
+
 ## Execução via Docker Compose
 
 Pré-requisitos: Docker (com Compose v2) e Docker Desktop em execução.
@@ -210,6 +246,9 @@ Toda configuração é fornecida por variáveis de ambiente (referência em `.en
 | `RESILIENCE_BACKOFF_MS` | `200` | Base do backoff entre tentativas de integrações |
 | `RESILIENCE_MAX_BACKOFF_MS` | `2000` | Teto do backoff entre tentativas |
 | `TOOLS_REPO_ROOT` | `/repo` | Raiz do repositório acessível pelas tools (proteção contra path traversal) |
+| `DEVOPS_ANOMALY_WINDOW_SIZE` | `5` | Tamanho da janela do baseline de anomalia |
+| `DEVOPS_ANOMALY_HIGH_THRESHOLD` | `0.5` | Desvio relativo a partir do qual a severidade é HIGH |
+| `DEVOPS_ANOMALY_MEDIUM_THRESHOLD` | `0.2` | Desvio relativo a partir do qual a severidade é MEDIUM |
 
 ## Endpoints
 
@@ -237,6 +276,8 @@ Toda configuração é fornecida por variáveis de ambiente (referência em `.en
 | `app` | POST | `/api/agent/analyze-impact` | Achados de impacto (IA sobre evidências) |
 | `app` | POST | `/api/agent/assess-risk` | Sugestão de risco (IA; regra final no Java) |
 | `app` | POST | `/api/agent/generate-test-plan` | QA: code review → matriz de risco → recomendações priorizadas com justificativa (bloco `qa`; degradação marcada) |
+| `app` | POST | `/api/devops/log-analysis` | Diagnóstico estruturado de logs de pipeline com IA (`{log}`), com redação de segredos e varredura de injeção |
+| `app` | POST | `/api/devops/runs` | Registra execução de pipeline (`{durationMs, success}`) e retorna relatório de anomalia/tendência de falha |
 | `app` | POST | `/mcp` | Servidor MCP (JSON-RPC streamable HTTP): `search_code`, `get_file` |
 | `agent` | POST | `/analyze` | Executa o grafo de análise (corpo `{request_id, text}`) |
 | `agent` | GET | `/health` | Health check |
@@ -261,4 +302,4 @@ Toda configuração é fornecida por variáveis de ambiente (referência em `.en
 - Python (em `agent/`): `pytest` e `ruff check .` — cobre o grafo nos cenários do roadmap (happy path, high risk, prompt injection com avaliação obtida da aplicação, endpoint de segurança indisponível, tool failure, validation failure, max iteration, repasse do bloco `qa` ao `final_result`), aplicação indisponível, paralelismo e propagação de trace_id, com client HTTP mockado.
 - E2E: `docker compose up --build` + `python scripts/smoke_test.py` — Cenário A (desconto VIP 10%→15%) e Cenário B adversário (fixture com a frase oficial de injeção → evento de segurança persistido, risco HIGH permanece PENDING, decisão humana via endpoint), com chave configurada ou fluxo degradado marcado (`analysis_unavailable`) sem chave; `trace_id` correlacionado nos logs dos dois serviços.
 - Demonstrações: `scripts/rag_demo.py` (RAG com fontes/scores), `scripts/mcp_tools_demo.py` (MCP tools/list + proteção de path), `scripts/fake_embeddings_server.py` (embeddings determinísticos locais só para demonstração), `scripts/generate_evidence.py` (gera as evidências 05/06 como placeholders até os screenshots reais da demonstração).
-- CI: `.github/workflows/ci.yml` (jobs `spring`, `agent` e `e2e`).
+- CI: `.github/workflows/ci.yml` — job `spring` com estágios `Compile` → `Unit tests (surefire)` → `Integration tests (mvn verify com Failsafe)` → `Quality checks (spotless)` → `Docker image`, artefatos `build.log`/`test.log` redigidos e publicados com `if: always()`; jobs `agent` (ruff + pytest) e `e2e` (compose + smoke) com `needs`.
