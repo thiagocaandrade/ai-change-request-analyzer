@@ -22,6 +22,11 @@ import org.springframework.stereotype.Component;
 public class AgentResultMapper {
 
   public ChangeAnalysis toAnalysis(ChangeRequest request, Map<String, Object> result) {
+    return toAnalysis(request, result, null);
+  }
+
+  public ChangeAnalysis toAnalysis(
+      ChangeRequest request, Map<String, Object> result, QaBlockDto qa) {
     ChangeAnalysis analysis = new ChangeAnalysis();
     analysis.setChangeRequest(request);
     if (result == null) {
@@ -46,7 +51,7 @@ public class AgentResultMapper {
             new ImpactFinding(component, description, stringOf(map.get("severity"))));
       }
     }
-    for (AgentGatewayDtos.TestRecommendation recommendation : toRecommendations(result)) {
+    for (AgentGatewayDtos.TestRecommendation recommendation : toRecommendations(result, qa)) {
       analysis.addRecommendation(
           new com.ai.change.request.analyzer.domain.TestRecommendation(
               recommendation.component(),
@@ -60,15 +65,25 @@ public class AgentResultMapper {
   }
 
   /**
-   * Recomendacoes do resultado: preferencia pelo bloco {@code qa.recommendations} (priorizadas com
-   * justificativa); sem bloco QA, usa o {@code test_plan} plano (contrato antigo preservado).
+   * Recomendacoes do resultado: preferencia pelo bloco QA tipado (priorizadas com justificativa e
+   * categoria de risco); sem bloco tipado, tenta o campo {@code qa} do mapa e, por fim, o {@code
+   * test_plan} (contrato antigo preservado).
    */
   public List<AgentGatewayDtos.TestRecommendation> toRecommendations(Map<String, Object> result) {
+    return toRecommendations(result, null);
+  }
+
+  public List<AgentGatewayDtos.TestRecommendation> toRecommendations(
+      Map<String, Object> result, QaBlockDto qa) {
+    if (qa != null && qa.recommendations() != null) {
+      return List.copyOf(qa.recommendations());
+    }
     if (result == null) {
       return List.of();
     }
     Object rawQa = result.get("qa");
-    if (rawQa instanceof Map<?, ?> qa && qa.get("recommendations") instanceof List<?> rawItems) {
+    if (rawQa instanceof Map<?, ?> qaMap
+        && qaMap.get("recommendations") instanceof List<?> rawItems) {
       List<AgentGatewayDtos.TestRecommendation> recommendations = new ArrayList<>();
       for (Object item : rawItems) {
         if (!(item instanceof Map<?, ?> map)) {

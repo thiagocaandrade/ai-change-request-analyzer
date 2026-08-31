@@ -6,6 +6,7 @@ import com.ai.change.request.analyzer.domain.ChangeAnalysis;
 import com.ai.change.request.analyzer.domain.ChangeRequest;
 import com.ai.change.request.analyzer.domain.RiskLevel;
 import com.ai.change.request.analyzer.security.SecurityAssessmentService.SecurityEvent;
+import com.ai.change.request.analyzer.web.AgentGatewayDtos;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
@@ -201,6 +202,34 @@ class AgentResultMapperTest {
 
     assertThat(analysis.getRecommendations()).hasSize(1);
     assertThat(analysis.getRecommendations().get(0).getPriorityJustification()).isNull();
+  }
+
+  @Test
+  void mapsTypedQaBlockRecommendationsWithJustificationAndCategory() {
+    var qa =
+        new AgentGatewayDtos.QaBlockDto(
+            List.of(),
+            List.of(
+                new AgentGatewayDtos.TestRecommendation(
+                    "discount-service",
+                    "cobrir desconto VIP",
+                    "HIGH",
+                    "matriz deterministica",
+                    "financial_business_rule_regression",
+                    true)),
+            List.of(),
+            false,
+            null);
+
+    ChangeAnalysis analysis =
+        mapper.toAnalysis(
+            request(), Map.of("risk", "HIGH", "confidence", 0.9, "test_plan", List.of()), qa);
+
+    assertThat(analysis.getRecommendations()).hasSize(1);
+    var recommendation = analysis.getRecommendations().get(0);
+    assertThat(recommendation.getComponent()).isEqualTo("discount-service");
+    assertThat(recommendation.getPriorityJustification()).isEqualTo("matriz deterministica");
+    assertThat(recommendation.getRiskCategory()).isEqualTo("financial_business_rule_regression");
   }
 
   @Test

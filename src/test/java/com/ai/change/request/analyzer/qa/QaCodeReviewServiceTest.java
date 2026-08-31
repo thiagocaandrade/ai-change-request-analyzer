@@ -115,15 +115,27 @@ class QaCodeReviewServiceTest {
   }
 
   @Test
-  void degradedRagMarksOutcomeDegradedWithEmptyDocuments() {
+  void degradedRagDoesNotMarkReviewDegradedWhenModelSucceeded() {
     when(ragService.search(anyString())).thenReturn(new KnowledgeSearchResult(List.of(), true));
+    when(aiAnalysisService.reviewCode(anyString(), anyString()))
+        .thenReturn(new CodeReviewResult(List.of(), List.of(), false));
+
+    QaCodeReviewService.ReviewOutcome outcome = service.review("Alterar desconto VIP", null);
+
+    assertThat(outcome.degraded()).isFalse();
+    assertThat(outcome.documents()).isEmpty();
+    assertThat(outcome.result().findings()).isEmpty();
+  }
+
+  @Test
+  void degradedModelMarksOutcomeDegraded() {
+    when(ragService.search(anyString())).thenReturn(new KnowledgeSearchResult(List.of(), false));
     when(aiAnalysisService.reviewCode(anyString(), anyString()))
         .thenReturn(new CodeReviewResult(List.of(), List.of(), true));
 
     QaCodeReviewService.ReviewOutcome outcome = service.review("Alterar desconto VIP", null);
 
     assertThat(outcome.degraded()).isTrue();
-    assertThat(outcome.documents()).isEmpty();
     assertThat(outcome.result().findings()).isEmpty();
   }
 }

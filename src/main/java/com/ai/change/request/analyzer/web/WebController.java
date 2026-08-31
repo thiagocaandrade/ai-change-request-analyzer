@@ -144,7 +144,7 @@ public class WebController {
     }
     if (parsed == null || approver == null || approver.isBlank()) {
       attributes.addFlashAttribute(
-          "error", "Decisão inválida: informe o aprovador e escolha APPROVED ou REJECTED.");
+          "error", "Decisão inválida: informe o aprovador e escolha Aprovar ou Rejeitar.");
       return redirectSeeOther("/requests/" + id);
     }
     try {

@@ -81,7 +81,7 @@ class WebE2ETest {
 
     var decidedPage = mockMvc.perform(get("/requests/" + id)).andReturn();
     assertThat(decidedPage.getResponse().getContentAsString())
-        .contains("APPROVED", "tech lead", "Decisão registrada");
+        .contains("Aprovada", "tech lead", "Decisão registrada");
 
     ChangeRequest persisted = repository.findById(UUID.fromString(id)).orElseThrow();
     assertThat(persisted.getStatus()).isEqualTo(ChangeRequestStatus.COMPLETED);

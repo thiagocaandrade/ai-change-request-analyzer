@@ -66,7 +66,9 @@ public class QaCodeReviewService {
     String evidence =
         evidenceRenderer.renderSections(Map.of("DOCUMENTOS", documents, "DIFF", diffSection));
     CodeReviewResult result = aiAnalysisService.reviewCode(changeText, evidence);
-    return new ReviewOutcome(
-        result, List.copyOf(documents), search.degraded() || result.degraded());
+    // Degradacao do RAG nao marca a revisao como degradada: os findings seguem gerados pelo
+    // modelo (ou pelo fallback do proprio estagio). A indisponibilidade do RAG permanece visivel
+    // nos eventos de trace da busca de conhecimento.
+    return new ReviewOutcome(result, List.copyOf(documents), result.degraded());
   }
 }

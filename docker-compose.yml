@@ -15,6 +15,19 @@ services:
       timeout: 5s
       retries: 12
 
+  embeddings:
+    image: python:3.12-slim
+    command: ["python", "/scripts/fake_embeddings_server.py", "--port", "9999"]
+    volumes:
+      - ./scripts/fake_embeddings_server.py:/scripts/fake_embeddings_server.py:ro
+    ports:
+      - "9999:9999"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen(urllib.request.Request('http://localhost:9999/v1/embeddings', data=b'{\"model\":\"x\",\"input\":\"a\"}', headers={'Content-Type':'application/json'}), timeout=3)"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
   agent:
     build:
       context: ./agent
@@ -44,7 +57,7 @@ services:
       AI_CHAT_BASE_URL: ${AI_CHAT_BASE_URL:-}
       AI_EMBEDDING_MODEL: ${AI_EMBEDDING_MODEL:-}
       AI_EMBEDDING_API_KEY: ${AI_EMBEDDING_API_KEY:-}
-      AI_EMBEDDING_BASE_URL: ${AI_EMBEDDING_BASE_URL:-}
+      AI_EMBEDDING_BASE_URL: ${AI_EMBEDDING_BASE_URL:-http://embeddings:9999/v1}
       AI_RAG_ENABLED: ${AI_RAG_ENABLED:-true}
       AI_RAG_TOP_K: ${AI_RAG_TOP_K:-4}
       AI_RAG_SIMILARITY_THRESHOLD: ${AI_RAG_SIMILARITY_THRESHOLD:-0.7}

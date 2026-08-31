@@ -19,17 +19,26 @@
 
     <section class="card">
         <h2>Solicitação</h2>
-        <p><strong>ID:</strong> <span th:text="${request.id}"></span></p>
-        <p><strong>Status:</strong>
-            <span class="badge" th:classappend="'status-' + ${request.status.name().toLowerCase()}"
-                  th:text="${request.status}"></span>
-        </p>
-        <p><strong>Texto:</strong> <span th:text="${request.text}"></span></p>
-        <p><strong>trace_id:</strong>
-            <a th:href="@{/traces/{traceId}(traceId=${request.traceId})}" th:text="${request.traceId}"></a>
-        </p>
-        <p th:if="${request.failureReason != null}"><strong>Motivo da falha:</strong>
-            <span th:text="${request.failureReason}"></span>
+        <div class="meta-grid">
+            <div class="meta-item">
+                <span class="meta-label">ID</span>
+                <span class="meta-value" th:text="${request.id}"></span>
+            </div>
+            <div class="meta-item">
+                <span class="meta-label">Status</span>
+                <span class="badge" th:classappend="'status-' + ${request.status.name().toLowerCase()}"
+                      th:text="${request.status}"></span>
+            </div>
+            <div class="meta-item">
+                <span class="meta-label">trace_id</span>
+                <a class="meta-value trace-link"
+                   th:href="@{/traces/{traceId}(traceId=${request.traceId})}"
+                   th:text="${request.traceId}"></a>
+            </div>
+        </div>
+        <div class="request-text" th:text="${request.text}"></div>
+        <p class="failure-reason" th:if="${request.failureReason != null}">
+            <strong>Motivo da falha:</strong> <span th:text="${request.failureReason}"></span>
         </p>
     </section>
 
@@ -41,79 +50,118 @@
 
     <section class="card">
         <h2>Risco</h2>
-        <p th:if="${analysis == null}">A análise ainda não está disponível para esta solicitação.</p>
-        <p th:if="${analysis != null and analysis.riskLevel == null}">Risco não disponível.</p>
-        <div th:if="${analysis != null and analysis.riskLevel != null}">
-            <p><strong>Nível:</strong>
-                <span class="badge" th:classappend="'risk-' + ${analysis.riskLevel.name().toLowerCase()}"
+        <p class="muted" th:if="${analysis == null}">A análise ainda não está disponível para esta solicitação.</p>
+        <p class="muted" th:if="${analysis != null and analysis.riskLevel == null}">Risco não disponível.</p>
+        <div class="risk-summary" th:if="${analysis != null and analysis.riskLevel != null}">
+            <div class="risk-level-box">
+                <span class="risk-label">Nível de risco</span>
+                <span class="badge badge-lg" th:classappend="'risk-' + ${analysis.riskLevel.name().toLowerCase()}"
                       th:text="${analysis.riskLevel}"></span>
-            </p>
-            <p><strong>Confiança:</strong> <span th:text="${analysis.confidence}"></span></p>
-            <p><strong>Justificativa:</strong> <span th:text="${analysis.rationale}"></span></p>
+            </div>
+            <div class="risk-detail">
+                <p><strong>Confiança:</strong> <span th:text="${analysis.confidence}"></span></p>
+                <p><strong>Justificativa:</strong> <span th:text="${analysis.rationale}"></span></p>
+            </div>
         </div>
     </section>
 
     <section class="card" th:if="${analysis != null}">
-        <h2>Findings de impacto</h2>
-        <table>
-            <thead>
-            <tr><th>Componente</th><th>Descrição</th><th>Severidade</th></tr>
-            </thead>
-            <tbody>
-            <tr th:each="finding : ${analysis.findings}">
-                <td th:text="${finding.component}"></td>
-                <td th:text="${finding.description}"></td>
-                <td th:text="${finding.severity}"></td>
-            </tr>
-            <tr th:if="${analysis.findings.isEmpty()}">
-                <td colspan="3">Nenhum finding registrado.</td>
-            </tr>
-            </tbody>
-        </table>
+        <h2>Impactos identificados</h2>
+        <p class="muted">Impacto da alteração nos componentes do sistema.</p>
+        <div class="table-wrap">
+            <table>
+                <thead>
+                <tr><th>Componente</th><th>Descrição</th><th>Severidade</th></tr>
+                </thead>
+                <tbody>
+                <tr th:each="finding : ${analysis.findings}">
+                    <td class="cell-component" th:text="${finding.component}"></td>
+                    <td class="cell-description" th:text="${finding.description}"></td>
+                    <td>
+                        <th:block th:switch="${finding.severity}">
+                            <span th:case="'HIGH'" class="badge badge-high">Alta</span>
+                            <span th:case="'MEDIUM'" class="badge badge-medium">Média</span>
+                            <span th:case="'LOW'" class="badge badge-low">Baixa</span>
+                            <span th:case="*" class="badge" th:text="${finding.severity}"></span>
+                        </th:block>
+                    </td>
+                </tr>
+                <tr th:if="${analysis.findings.isEmpty()}">
+                    <td colspan="3" class="empty-cell">Nenhum impacto identificado.</td>
+                </tr>
+                </tbody>
+            </table>
+        </div>
     </section>
 
     <section class="card" th:if="${analysis != null}">
         <h2>Testes recomendados</h2>
-        <table>
-            <thead>
-            <tr><th>Componente</th><th>Descrição</th><th>Prioridade</th><th>Categoria de risco</th><th>Justificativa</th></tr>
-            </thead>
-            <tbody>
-            <tr th:each="recommendation : ${analysis.testRecommendations}">
-                <td th:text="${recommendation.component}"></td>
-                <td th:text="${recommendation.description}"></td>
-                <td th:text="${recommendation.priority}"></td>
-                <td th:text="${recommendation.riskCategory}"></td>
-                <td th:text="${recommendation.priorityJustification}"></td>
-            </tr>
-            <tr th:if="${analysis.testRecommendations.isEmpty()}">
-                <td colspan="5">Nenhuma recomendação de teste registrada.</td>
-            </tr>
-            </tbody>
-        </table>
+        <p class="muted">Recomendações de teste priorizadas pela matriz de risco.</p>
+        <div class="table-wrap">
+            <table>
+                <thead>
+                <tr>
+                    <th>Componente</th><th>Descrição</th><th>Prioridade</th>
+                    <th>Categoria de risco</th><th>Justificativa</th>
+                </tr>
+                </thead>
+                <tbody>
+                <tr th:each="recommendation : ${analysis.testRecommendations}">
+                    <td class="cell-component" th:text="${recommendation.component}"></td>
+                    <td class="cell-description" th:text="${recommendation.description}"></td>
+                    <td>
+                        <th:block th:switch="${recommendation.priority}">
+                            <span th:case="'HIGH'" class="badge badge-high">Alta</span>
+                            <span th:case="'MEDIUM'" class="badge badge-medium">Média</span>
+                            <span th:case="'LOW'" class="badge badge-low">Baixa</span>
+                            <span th:case="*" class="badge" th:text="${recommendation.priority}"></span>
+                        </th:block>
+                    </td>
+                    <td th:text="${recommendation.riskCategory} ?: '—'"></td>
+                    <td class="cell-description" th:text="${recommendation.priorityJustification} ?: '—'"></td>
+                </tr>
+                <tr th:if="${analysis.testRecommendations.isEmpty()}">
+                    <td colspan="5" class="empty-cell">Nenhuma recomendação de teste registrada.</td>
+                </tr>
+                </tbody>
+            </table>
+        </div>
     </section>
 
     <section class="card" th:if="${analysis != null and analysis.qa != null}">
-        <h2>QA com IA (code review)</h2>
-        <p th:if="${analysis.qa.degraded}" class="badge badge-warning">
+        <h2>Revisão de código com IA (QA)</h2>
+        <p class="qa-warning" th:if="${analysis.qa.degraded and analysis.qa.findings.isEmpty()}">
             QA degradado: nenhum modelo de IA configurado ou fallback determinístico aplicado —
-            findings abaixo não foram gerados por IA.
+            os achados abaixo não foram gerados por IA.
         </p>
-        <table th:if="${!analysis.qa.findings.isEmpty()}">
-            <thead>
-            <tr><th>Componente</th><th>Descrição</th><th>Severidade</th><th>Fonte</th></tr>
-            </thead>
-            <tbody>
-            <tr th:each="finding : ${analysis.qa.findings}">
-                <td th:text="${finding.component}"></td>
-                <td th:text="${finding.description}"></td>
-                <td th:text="${finding.severity}"></td>
-                <td th:text="${finding.source}"></td>
-            </tr>
-            </tbody>
-        </table>
-        <p th:if="${analysis.qa.findings.isEmpty()}">
-            Nenhum finding de revisão foi gerado pelo modelo (QA degradado ou sem riscos
+        <p class="qa-warning" th:if="${analysis.qa.degraded and !analysis.qa.findings.isEmpty()}">
+            QA parcialmente degradado: a etapa de geração de testes usou fallback determinístico;
+            os achados abaixo foram gerados por IA.
+        </p>
+        <div class="table-wrap" th:if="${!analysis.qa.findings.isEmpty()}">
+            <table>
+                <thead>
+                <tr><th>Componente</th><th>Descrição</th><th>Severidade</th><th>Fonte</th></tr>
+                </thead>
+                <tbody>
+                <tr th:each="finding : ${analysis.qa.findings}">
+                    <td class="cell-component" th:text="${finding.component}"></td>
+                    <td class="cell-description" th:text="${finding.description}"></td>
+                    <td>
+                        <th:block th:switch="${finding.severity}">
+                            <span th:case="'HIGH'" class="badge badge-high">Alta</span>
+                            <span th:case="'MEDIUM'" class="badge badge-medium">Média</span>
+                            <span th:case="'LOW'" class="badge badge-low">Baixa</span>
+                            <span th:case="*" class="badge" th:text="${finding.severity}"></span>
+                        </th:block>
+                    </td>
+                    <td th:text="${finding.source}"></td>
+                </tr>
+                </tbody>
+            </table>
+        </div>
+        <p class="muted" th:if="${analysis.qa.findings.isEmpty()}">
+            Nenhum achado de revisão foi gerado pelo modelo (QA degradado ou sem riscos
             identificados); as recomendações priorizadas acima seguem a matriz de risco.
         </p>
     </section>
@@ -121,50 +169,69 @@
     <section class="card"
              th:if="${analysis != null and analysis.securityAssessment != null and analysis.securityAssessment.detected}">
         <h2>Eventos de segurança</h2>
-        <table>
-            <thead>
-            <tr><th>Tipo</th><th>Origem</th><th>Evidência</th><th>Ação</th></tr>
-            </thead>
-            <tbody>
-            <tr th:each="event : ${analysis.securityAssessment.events}">
-                <td th:text="${event.type}"></td>
-                <td th:text="${event.source}"></td>
-                <td th:text="${event.evidence}"></td>
-                <td th:text="${event.action}"></td>
-            </tr>
-            </tbody>
-        </table>
+        <div class="table-wrap">
+            <table>
+                <thead>
+                <tr><th>Tipo</th><th>Origem</th><th>Evidência</th><th>Ação</th></tr>
+                </thead>
+                <tbody>
+                <tr th:each="event : ${analysis.securityAssessment.events}">
+                    <td th:text="${event.type}"></td>
+                    <td th:text="${event.source}"></td>
+                    <td class="cell-description" th:text="${event.evidence}"></td>
+                    <td th:text="${event.action}"></td>
+                </tr>
+                </tbody>
+            </table>
+        </div>
     </section>
 
     <section class="card">
         <h2>Aprovação humana</h2>
-        <p th:if="${approval == null}">Aprovação ainda não avaliada (análise não disponível).</p>
+        <p class="muted" th:if="${approval == null}">Aprovação ainda não avaliada (análise não disponível).</p>
         <p th:if="${approval != null and !approval.required}">
             Aprovação humana <strong>não exigida</strong> para esta análise.
         </p>
-        <div th:if="${approval != null and approval.required and approval.status.name() == 'PENDING'}">
+        <div class="approval-box" th:if="${approval != null and approval.required and approval.status.name() == 'PENDING'}">
             <p>Aprovação humana <strong>exigida</strong> (status:
-                <span class="badge badge-warning" th:text="${approval.status}"></span>).
+                <span class="badge badge-warning">Pendente</span>).
                 Nenhuma ação sensível será executada até a decisão.</p>
-            <form th:action="@{/requests/{id}/approval(id=${request.id})}" method="post">
-                <label for="approver">Aprovador</label>
-                <input type="text" id="approver" name="approver" required>
-                <label for="decision">Decisão</label>
-                <select id="decision" name="decision">
-                    <option value="APPROVED">APPROVED</option>
-                    <option value="REJECTED">REJECTED</option>
-                </select>
+            <form class="approval-form" th:action="@{/requests/{id}/approval(id=${request.id})}" method="post">
+                <div class="form-field">
+                    <label for="approver">Aprovador</label>
+                    <input type="text" id="approver" name="approver" required>
+                </div>
+                <div class="form-field">
+                    <label for="decision">Decisão</label>
+                    <select id="decision" name="decision">
+                        <option value="APPROVED">Aprovar</option>
+                        <option value="REJECTED">Rejeitar</option>
+                    </select>
+                </div>
                 <button type="submit">Registrar decisão</button>
             </form>
         </div>
         <div th:if="${approval != null and approval.required and approval.status.name() != 'PENDING'}">
-            <p><strong>Decisão registrada:</strong>
-                <span class="badge" th:classappend="'decision-' + ${approval.status.name().toLowerCase()}"
-                      th:text="${approval.status}"></span>
-            </p>
-            <p><strong>Aprovador:</strong> <span th:text="${approval.approver}"></span></p>
-            <p><strong>Decisão:</strong> <span th:text="${approval.decision}"></span></p>
-            <p><strong>Momento:</strong> <span th:text="${approval.decidedAt}"></span></p>
+            <div class="meta-grid">
+                <div class="meta-item">
+                    <span class="meta-label">Decisão registrada</span>
+                    <span class="badge" th:classappend="'decision-' + ${approval.status.name().toLowerCase()}">
+                        <th:block th:switch="${approval.status.name()}">
+                            <span th:case="'APPROVED'">Aprovada</span>
+                            <span th:case="'REJECTED'">Rejeitada</span>
+                            <span th:case="*" th:text="${approval.status}"></span>
+                        </th:block>
+                    </span>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">Aprovador</span>
+                    <span class="meta-value" th:text="${approval.approver}"></span>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">Momento</span>
+                    <span class="meta-value" th:text="${approval.decidedAt}"></span>
+                </div>
+            </div>
         </div>
     </section>
 </main>

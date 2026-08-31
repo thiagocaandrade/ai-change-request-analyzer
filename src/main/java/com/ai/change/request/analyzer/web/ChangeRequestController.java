@@ -77,12 +77,10 @@ public class ChangeRequestController {
 
     try {
       var agentResponse = agentClient.analyze(request.getId().toString(), body.text(), traceId);
-      ChangeAnalysis analysis = agentResultMapper.toAnalysis(request, agentResponse.result());
+      var qa = agentResponse.qa();
+      ChangeAnalysis analysis = agentResultMapper.toAnalysis(request, agentResponse.result(), qa);
       analysisService.persistAnalysis(
-          request,
-          analysis,
-          agentResultMapper.toSecurityEvents(agentResponse.result()),
-          agentResultMapper.toQa(agentResponse.result()));
+          request, analysis, agentResultMapper.toSecurityEvents(agentResponse.result()), qa);
       request.setStatus(ChangeRequestStatus.COMPLETED);
       traceService.record(
           "pipeline",

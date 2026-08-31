@@ -153,7 +153,7 @@ class WebUiTest {
     var result = mockMvc.perform(get("/requests/" + id)).andReturn();
 
     String content = result.getResponse().getContentAsString();
-    assertThat(content).contains("exigida", "Registrar decisão", "APPROVED", "REJECTED");
+    assertThat(content).contains("exigida", "Registrar decisão", "Aprovar", "Rejeitar");
     assertThat(content).contains("name=\"approver\"", "name=\"decision\"");
   }
 
@@ -188,7 +188,7 @@ class WebUiTest {
 
     var result = mockMvc.perform(get("/requests/" + id)).andReturn();
     String content = result.getResponse().getContentAsString();
-    assertThat(content).contains("APPROVED", "revisora", "Decisão registrada");
+    assertThat(content).contains("Aprovada", "revisora", "Decisão registrada");
     assertThat(content).doesNotContain("Registrar decisão");
   }
 

@@ -22,6 +22,11 @@ import com.ai.change.request.analyzer.rag.RagService;
 import com.ai.change.request.analyzer.rag.RagService.KnowledgeHit;
 import com.ai.change.request.analyzer.rag.RagService.KnowledgeSearchResult;
 import com.ai.change.request.analyzer.security.SecurityAssessmentRepository;
+import com.ai.change.request.analyzer.web.AgentGatewayDtos.QaBlockDto;
+import com.ai.change.request.analyzer.web.AgentGatewayDtos.QaFindingDto;
+import com.ai.change.request.analyzer.web.AgentGatewayDtos.QaRecordDto;
+import com.ai.change.request.analyzer.web.AgentGatewayDtos.RiskMatrixEntryDto;
+import com.ai.change.request.analyzer.web.AgentGatewayDtos.TestRecommendation;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.List;
@@ -65,58 +70,39 @@ class QaE2ETest {
 
   @Test
   void scenarioAFullApiAnalysisWithQaPersistsFindingsRecommendationsAndRecords() throws Exception {
-    Map<String, Object> qa =
-        Map.of(
-            "degraded",
+    QaBlockDto qa =
+        new QaBlockDto(
+            List.of(
+                new QaFindingDto(
+                    "discount-service",
+                    "teste de regressao da regra de desconto ausente",
+                    "HIGH",
+                    "business-rules.md")),
+            List.of(
+                new TestRecommendation(
+                    "discount-service",
+                    "Cobrir desconto VIP de 15%",
+                    "HIGH",
+                    "categoria financial_business_rule_regression: impacto=HIGH, probabilidade=MEDIUM -> HIGH (matriz deterministica)",
+                    "financial_business_rule_regression",
+                    true)),
+            List.of(
+                new RiskMatrixEntryDto(
+                    "financial_business_rule_regression",
+                    true,
+                    "HIGH",
+                    "MEDIUM",
+                    "HIGH",
+                    "matriz deterministica")),
             false,
-            "findings",
-            List.of(
-                Map.of(
-                    "component", "discount-service",
-                    "description", "teste de regressao da regra de desconto ausente",
-                    "severity", "HIGH",
-                    "source", "business-rules.md")),
-            "recommendations",
-            List.of(
-                Map.of(
-                    "component", "discount-service",
-                    "description", "Cobrir desconto VIP de 15%",
-                    "priority", "HIGH",
-                    "priorityJustification",
-                        "categoria financial_business_rule_regression: impacto=HIGH, probabilidade=MEDIUM -> HIGH (matriz deterministica)",
-                    "riskCategory", "financial_business_rule_regression",
-                    "refined", true)),
-            "riskMatrix",
-            List.of(
-                Map.of(
-                    "category", "financial_business_rule_regression",
-                    "applicable", true,
-                    "impact", "HIGH",
-                    "likelihood", "MEDIUM",
-                    "priority", "HIGH",
-                    "justification", "matriz deterministica")),
-            "record",
-            Map.of(
-                "stage", "CODE_REVIEW",
-                "promptVersion", "code-review-v1",
-                "resultJson", "{}",
-                "degraded", false,
-                "iterations", 0,
-                "traceId", "trace-qa-a"));
+            new QaRecordDto("CODE_REVIEW", "code-review-v1", "{}", false, 0, "trace-qa-a"));
     when(agentClient.analyze(anyString(), anyString(), anyString()))
         .thenReturn(
             new AgentResponse(
                 "req-qa-a",
                 "completed",
-                Map.of(
-                    "risk",
-                    "HIGH",
-                    "confidence",
-                    0.95,
-                    "rationale",
-                    "regra financeira",
-                    "qa",
-                    qa)));
+                Map.of("risk", "HIGH", "confidence", 0.95, "rationale", "regra financeira"),
+                qa));
 
     String id = submitForm("Alterar o desconto de clientes VIP de 10% para 15%.");
 
