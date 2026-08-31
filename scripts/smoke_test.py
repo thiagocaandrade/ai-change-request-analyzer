@@ -5,7 +5,7 @@ Sobe a stack via docker compose e valida:
 - POST /api/change-requests retorna 201 com status COMPLETED;
 - a analise do agente (grafo LangGraph + evidencia real da aplicacao) e
   persistida com risco;
-- com chave de IA (AI_CHAT_API_KEY): classificacao via LLM e RAG com fontes
+- com chave de IA (AI_API_KEY): classificacao via LLM e RAG com fontes
   e score (quando AI_EMBEDDING_API_KEY presente);
 - sem chave: fluxo degradado marcado (analysis_unavailable), mantendo
   tools funcionais (codigo) e memoria (historico);
@@ -26,8 +26,11 @@ import subprocess
 import time
 import urllib.error
 import urllib.request
+from pathlib import Path
 
 APP_URL = "http://localhost:8080"
+
+EVIDENCE_DIR = Path(__file__).resolve().parent.parent / "docs" / "evidence"
 
 CHANGE_TEXT = "Alterar o desconto de clientes VIP de 10% para 15%"
 
@@ -179,10 +182,13 @@ def check_agent_contract(ai_mode):
 
 def compose_exec(container_args, input_text=None):
     command = ["docker", "compose", "exec", "-T", "app", "sh", "-c", container_args]
-    options = {"capture_output": True, "check": True}
-    if input_text is not None:
-        options["input"] = input_text.encode("utf-8")
-    return subprocess.run(command, **options)
+    payload = input_text.encode("utf-8") if input_text is not None else None
+    return subprocess.run(
+        command,
+        capture_output=True,
+        check=True,
+        input=payload,
+    )
 
 
 def ensure_fixture():
@@ -201,6 +207,7 @@ def remove_fixture():
 
 def scenario_b():
     ensure_fixture()
+    summary = {}
     try:
         status, payload = post_request()
         if status != 201:
@@ -225,6 +232,8 @@ def scenario_b():
         if not any(event.get("type") == "prompt_injection" for event in events):
             raise SystemExit(f"evento prompt_injection esperado: {events}")
         print(f"Cenario B: injecao detectada com {len(events)} evento(s) persistido(s)")
+        summary["injectionDetected"] = True
+        summary["securityEvents"] = len(events)
 
         status, approval = post(
             f"/api/change-requests/{request_id}/approval",
@@ -240,12 +249,58 @@ def scenario_b():
             "Cenario B: decisao humana registrada "
             f"(approver={approval['approver']}, decision={approval['decision']})"
         )
+        summary["approvalStatus"] = approval.get("approvalStatus")
+        summary["approver"] = approval.get("approver")
+        summary["decision"] = approval.get("decision")
+        summary["riskLevel"] = analysis.get("riskLevel")
+        return summary
     finally:
         remove_fixture()
 
 
+def parallel_window(events):
+    started = next(
+        (event.get("createdAt") for event in events if event.get("event") == "started"), None
+    )
+    completed = next(
+        (event.get("durationMs") for event in events if event.get("event") == "completed"), None
+    )
+    if not started:
+        return None
+    return {"startedAt": started, "durationMs": completed or 0}
+
+
+def dump_evidence(trace_id, scenario_a, scenario_b):
+    EVIDENCE_DIR.mkdir(parents=True, exist_ok=True)
+    parallel = {"traceId": trace_id, "nodes": {}}
+    try:
+        _, _, events = get(f"/api/traces/{trace_id}")
+    except SystemExit:
+        events = []
+    for node in ("analyze-code", "retrieve-knowledge", "retrieve-history"):
+        node_events = [event for event in events if event.get("node") == node]
+        window = parallel_window(node_events)
+        if window:
+            parallel["nodes"][node] = window
+    (EVIDENCE_DIR / "trace-parallel.json").write_text(
+        json.dumps(parallel, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+    (EVIDENCE_DIR / "e2e-smoke-summary.json").write_text(
+        json.dumps(
+            {"traceId": trace_id, "scenarioA": scenario_a, "scenarioB": scenario_b},
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+    print(
+        f"artefatos de evidencia gravados em {EVIDENCE_DIR} "
+        "(trace-parallel.json, e2e-smoke-summary.json)"
+    )
+
+
 def main():
-    ai_mode = bool(os.getenv("AI_CHAT_API_KEY"))
+    ai_mode = bool(os.getenv("AI_API_KEY"))
     print(f"smoke mode={('ai' if ai_mode else 'degraded')}")
 
     wait_until_ready()
@@ -271,15 +326,18 @@ def main():
     if risk_level not in ("LOW", "MEDIUM", "HIGH"):
         raise SystemExit(f"analise persistida sem risco valido: {analysis}")
     print(f"analise persistida com risco {risk_level}")
+    scenario_a = {"status": payload.get("status"), "riskLevel": risk_level}
     if not ai_mode:
         if analysis.get("rationale") != "analysis_unavailable":
             raise SystemExit(
                 f"modo degradado: esperado rationale analysis_unavailable, obtido {analysis.get('rationale')}"
             )
         print("fluxo degradado marcado (analysis_unavailable)")
+        scenario_a["degraded"] = True
 
     check_agent_contract(ai_mode)
-    scenario_b()
+    scenario_b_summary = scenario_b()
+    dump_evidence(trace_id, scenario_a, scenario_b_summary)
     check_logs(trace_id)
     print(f"SMOKE OK: request COMPLETED com trace_id {trace_id} (mode={('ai' if ai_mode else 'degraded')})")
 
