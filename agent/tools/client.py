@@ -12,6 +12,7 @@ import httpx
 import structlog
 
 DEFAULT_TIMEOUT_S = 10.0
+DEFAULT_QA_TIMEOUT_S = 120.0
 MAX_RETRIES = 2
 
 logger = structlog.get_logger()
@@ -28,6 +29,7 @@ class AgentClient:
         self,
         base_url: str | None = None,
         timeout: float = DEFAULT_TIMEOUT_S,
+        qa_timeout: float | None = None,
         max_retries: int = MAX_RETRIES,
         transport=None,
     ):
@@ -35,12 +37,19 @@ class AgentClient:
             base_url or os.getenv("APP_URL", "http://localhost:8080")
         ).rstrip("/")
         self._timeout = timeout
+        self._qa_timeout = (
+            qa_timeout
+            if qa_timeout is not None
+            else float(os.getenv("AGENT_QA_TIMEOUT_S", str(DEFAULT_QA_TIMEOUT_S)))
+        )
         self._max_retries = max_retries
         self._transport = transport
 
-    def _post(self, path: str, payload: dict, trace_id: str | None) -> dict:
+    def _post(
+        self, path: str, payload: dict, trace_id: str | None, timeout: float | None = None
+    ) -> dict:
         headers = {"X-Trace-Id": trace_id or ""}
-        client = httpx.Client(timeout=self._timeout, transport=self._transport)
+        client = httpx.Client(timeout=timeout or self._timeout, transport=self._transport)
         last_error: Exception | None = None
         try:
             for attempt in range(self._max_retries + 1):
@@ -104,4 +113,6 @@ class AgentClient:
         return self._post("/api/agent/assess-risk", payload, trace_id)
 
     def generate_test_plan(self, payload: dict, trace_id: str | None) -> dict:
-        return self._post("/api/agent/generate-test-plan", payload, trace_id)
+        # Etapa QA: RAG + code review + geracao + refinamento (varias chamadas LLM
+        # sequenciais) - usa timeout proprio, maior que o das demais etapas.
+        return self._post("/api/agent/generate-test-plan", payload, trace_id, self._qa_timeout)

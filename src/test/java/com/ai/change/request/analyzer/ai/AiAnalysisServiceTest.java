@@ -81,6 +81,18 @@ class AiAnalysisServiceTest {
   }
 
   @Test
+  void modelProvidedDegradedFlagIsIgnored() {
+    String modelSaysDegraded =
+        "{\"category\":\"business_rule\",\"notes\":\"regra de desconto\",\"degraded\":true}";
+    AiAnalysisService service = serviceWith(new FakeChatModel(modelSaysDegraded));
+
+    ClassificationResult result = service.classify("Alterar desconto VIP");
+
+    assertThat(result.category()).isEqualTo("business_rule");
+    assertThat(result.degraded()).isFalse();
+  }
+
+  @Test
   void invalidOutputOnceRecoversWithinRetryLimit() {
     AiAnalysisService service =
         serviceWith(new FakeChatModel(INVALID_CLASSIFICATION, VALID_CLASSIFICATION));

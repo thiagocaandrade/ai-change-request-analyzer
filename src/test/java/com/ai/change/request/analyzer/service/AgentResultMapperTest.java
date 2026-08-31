@@ -21,6 +21,32 @@ class AgentResultMapperTest {
   }
 
   @Test
+  void mapsImpactFindingsFromAgentResult() {
+    ChangeAnalysis analysis =
+        mapper.toAnalysis(
+            request(),
+            Map.of(
+                "risk",
+                "HIGH",
+                "confidence",
+                0.9,
+                "findings",
+                List.of(
+                    Map.of(
+                        "component", "discount-service",
+                        "description", "desconto VIP alterado",
+                        "severity", "HIGH"),
+                    Map.of("component", "discount-service"),
+                    Map.of("description", "sem componente"),
+                    "not-a-map")));
+
+    assertThat(analysis.getFindings()).hasSize(1);
+    assertThat(analysis.getFindings().get(0).getComponent()).isEqualTo("discount-service");
+    assertThat(analysis.getFindings().get(0).getDescription()).isEqualTo("desconto VIP alterado");
+    assertThat(analysis.getFindings().get(0).getSeverity()).isEqualTo("HIGH");
+  }
+
+  @Test
   void mapsCompleteResultWithRisk() {
     ChangeAnalysis analysis =
         mapper.toAnalysis(

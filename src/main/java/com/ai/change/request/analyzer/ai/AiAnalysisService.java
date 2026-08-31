@@ -68,43 +68,47 @@ public class AiAnalysisService {
   }
 
   public ClassificationResult classify(String changeText) {
-    return normalizeClassification(
+    Generated<ClassificationResult> generated =
         generate(
             AnalysisStage.CLASSIFICATION,
             changeText,
             "",
             ClassificationResult.class,
-            () -> new ClassificationResult("general", "analysis_unavailable", true)));
+            () -> new ClassificationResult("general", "analysis_unavailable", true));
+    return normalizeClassification(generated.value(), generated.fallbackUsed());
   }
 
   public ImpactAnalysisResult analyzeImpact(String changeText, String evidence) {
-    return normalizeImpact(
+    Generated<ImpactAnalysisResult> generated =
         generate(
             AnalysisStage.IMPACT_ANALYSIS,
             changeText,
             evidence,
             ImpactAnalysisResult.class,
-            () -> new ImpactAnalysisResult(List.of(), true)));
+            () -> new ImpactAnalysisResult(List.of(), true));
+    return normalizeImpact(generated.value(), generated.fallbackUsed());
   }
 
   public RiskAnalysisResult assessRisk(String changeText, String evidence) {
-    return normalizeRisk(
+    Generated<RiskAnalysisResult> generated =
         generate(
             AnalysisStage.RISK_ANALYSIS,
             changeText,
             evidence,
             RiskAnalysisResult.class,
-            () -> new RiskAnalysisResult("MEDIUM", 0.5, "analysis_unavailable", true)));
+            () -> new RiskAnalysisResult("MEDIUM", 0.5, "analysis_unavailable", true));
+    return normalizeRisk(generated.value(), generated.fallbackUsed());
   }
 
   public TestPlanResult generateTestPlan(String changeText, String evidence) {
-    return normalizePlan(
+    Generated<TestPlanResult> generated =
         generate(
             AnalysisStage.TEST_GENERATION,
             changeText,
             evidence,
             TestPlanResult.class,
-            () -> new TestPlanResult(defaultFallbackPlan(), true)));
+            () -> new TestPlanResult(defaultFallbackPlan(), true));
+    return normalizePlan(generated.value(), generated.fallbackUsed());
   }
 
   /**
@@ -113,13 +117,14 @@ public class AiAnalysisService {
    * aplicacao. A sugestao nunca altera risco ou classificacao.
    */
   public SecurityAnalysisResult analyzeSecurity(String changeText, String evidence) {
-    return normalizeSecurity(
+    Generated<SecurityAnalysisResult> generated =
         generate(
             AnalysisStage.SECURITY_ANALYSIS,
             changeText,
             evidence,
             SecurityAnalysisResult.class,
-            () -> new SecurityAnalysisResult(List.of(), true)));
+            () -> new SecurityAnalysisResult(List.of(), true));
+    return normalizeSecurity(generated.value(), generated.fallbackUsed());
   }
 
   /**
@@ -128,13 +133,14 @@ public class AiAnalysisService {
    * marcado (sem findings gerados por modelo).
    */
   public CodeReviewResult reviewCode(String changeText, String evidence) {
-    return normalizeReview(
+    Generated<CodeReviewResult> generated =
         generate(
             AnalysisStage.CODE_REVIEW,
             changeText,
             evidence,
             CodeReviewResult.class,
-            () -> new CodeReviewResult(List.of(), List.of(), true)));
+            () -> new CodeReviewResult(List.of(), List.of(), true));
+    return normalizeReview(generated.value(), generated.fallbackUsed());
   }
 
   /**
@@ -143,7 +149,7 @@ public class AiAnalysisService {
    * pipeline e aplicada. Sem modelo configurado, retorna fallback deterministico marcado.
    */
   public LogAnalysisResult analyzeLogs(String logContent) {
-    return normalizeLogAnalysis(
+    Generated<LogAnalysisResult> generated =
         generate(
             AnalysisStage.LOG_ANALYSIS,
             logContent,
@@ -157,42 +163,50 @@ public class AiAnalysisService {
                     "",
                     "Revisao humana do log (degradado: analysis_unavailable).",
                     0.0,
-                    true)));
+                    true));
+    return normalizeLogAnalysis(generated.value(), generated.fallbackUsed());
   }
 
-  private static ClassificationResult normalizeClassification(ClassificationResult result) {
-    return new ClassificationResult(
-        result.category(), result.notes(), Boolean.TRUE.equals(result.degraded()));
+  /**
+   * Resultado de uma etapa com a marca de degradacao decidida pela aplicacao: o campo {@code
+   * degraded} eventualmente preenchido pelo modelo na saida JSON e ignorado — apenas o uso do
+   * fallback deterministico marca a etapa como degradada.
+   */
+  private record Generated<T>(T value, boolean fallbackUsed) {}
+
+  private static ClassificationResult normalizeClassification(
+      ClassificationResult result, boolean degraded) {
+    return new ClassificationResult(result.category(), result.notes(), degraded);
   }
 
-  private static ImpactAnalysisResult normalizeImpact(ImpactAnalysisResult result) {
-    return new ImpactAnalysisResult(result.findings(), Boolean.TRUE.equals(result.degraded()));
+  private static ImpactAnalysisResult normalizeImpact(
+      ImpactAnalysisResult result, boolean degraded) {
+    return new ImpactAnalysisResult(result.findings(), degraded);
   }
 
-  private static RiskAnalysisResult normalizeRisk(RiskAnalysisResult result) {
+  private static RiskAnalysisResult normalizeRisk(RiskAnalysisResult result, boolean degraded) {
     return new RiskAnalysisResult(
-        result.level(),
-        result.confidence(),
-        result.rationale(),
-        Boolean.TRUE.equals(result.degraded()));
+        result.level(), result.confidence(), result.rationale(), degraded);
   }
 
-  private static TestPlanResult normalizePlan(TestPlanResult result) {
-    return new TestPlanResult(result.recommendations(), Boolean.TRUE.equals(result.degraded()));
+  private static TestPlanResult normalizePlan(TestPlanResult result, boolean degraded) {
+    return new TestPlanResult(result.recommendations(), degraded);
   }
 
-  private static SecurityAnalysisResult normalizeSecurity(SecurityAnalysisResult result) {
-    return new SecurityAnalysisResult(result.findings(), Boolean.TRUE.equals(result.degraded()));
+  private static SecurityAnalysisResult normalizeSecurity(
+      SecurityAnalysisResult result, boolean degraded) {
+    return new SecurityAnalysisResult(result.findings(), degraded);
   }
 
-  private static CodeReviewResult normalizeReview(CodeReviewResult result) {
+  private static CodeReviewResult normalizeReview(CodeReviewResult result, boolean degraded) {
     return new CodeReviewResult(
         result.findings() == null ? List.of() : result.findings(),
         result.riskCategories() == null ? List.of() : result.riskCategories(),
-        Boolean.TRUE.equals(result.degraded()));
+        degraded);
   }
 
-  private static LogAnalysisResult normalizeLogAnalysis(LogAnalysisResult result) {
+  private static LogAnalysisResult normalizeLogAnalysis(
+      LogAnalysisResult result, boolean degraded) {
     return new LogAnalysisResult(
         result.summary(),
         result.failedStep(),
@@ -200,10 +214,10 @@ public class AiAnalysisService {
         result.evidence() == null ? "" : result.evidence(),
         result.recommendedAction(),
         result.confidence(),
-        Boolean.TRUE.equals(result.degraded()));
+        degraded);
   }
 
-  private <T> T generate(
+  private <T> Generated<T> generate(
       AnalysisStage stage,
       String changeText,
       String evidence,
@@ -222,7 +236,7 @@ public class AiAnalysisService {
           model,
           provider,
           traceId);
-      return fallback.get();
+      return new Generated<>(fallback.get(), true);
     }
 
     var converter = new BeanOutputConverter<>(outputType);
@@ -236,29 +250,36 @@ public class AiAnalysisService {
                 "evidence", evidence == null ? "" : evidence,
                 "format", converter.getFormat()));
 
-    return resilienceExecutor.execute(
-        stage.id(),
-        "llm_call",
-        () -> {
-          metrics.llmCall();
-          try {
-            String content = chatClient.prompt().system(system).user(user).call().content();
-            T result = converter.convert(content);
-            validate(result);
-            return result;
-          } catch (IllegalArgumentException e) {
-            metrics.validationFailure();
-            throw e;
-          } catch (RuntimeException e) {
-            throw e;
-          } catch (Exception e) {
-            throw new IllegalStateException("falha na chamada ao modelo", e);
-          }
-        },
-        chatTimeoutMs,
-        fallback,
-        null,
-        model);
+    java.util.concurrent.atomic.AtomicBoolean fallbackUsed =
+        new java.util.concurrent.atomic.AtomicBoolean(false);
+    T result =
+        resilienceExecutor.execute(
+            stage.id(),
+            "llm_call",
+            () -> {
+              metrics.llmCall();
+              try {
+                String content = chatClient.prompt().system(system).user(user).call().content();
+                T converted = converter.convert(content);
+                validate(converted);
+                return converted;
+              } catch (IllegalArgumentException e) {
+                metrics.validationFailure();
+                throw e;
+              } catch (RuntimeException e) {
+                throw e;
+              } catch (Exception e) {
+                throw new IllegalStateException("falha na chamada ao modelo", e);
+              }
+            },
+            chatTimeoutMs,
+            () -> {
+              fallbackUsed.set(true);
+              return fallback.get();
+            },
+            null,
+            model);
+    return new Generated<>(result, fallbackUsed.get());
   }
 
   private <T> void validate(T result) {

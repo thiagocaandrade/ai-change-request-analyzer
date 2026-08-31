@@ -1,9 +1,8 @@
 {
-  "traceId": "cc635778-bedc-43a4-b7fa-d375d323ae8c",
+  "traceId": "484f5dac-77d1-4f38-83c3-d9386361d7d2",
   "scenarioA": {
     "status": "COMPLETED",
-    "riskLevel": "MEDIUM",
-    "degraded": true
+    "riskLevel": "HIGH"
   },
   "scenarioB": {
     "injectionDetected": true,
